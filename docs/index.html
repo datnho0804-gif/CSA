@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thiết kế khung bảng hiệu</title>
+  <meta name="description" content="Nhập dài × rộng và quy cách sắt hộp → xuất ngay file PDF bản vẽ khung bảng hiệu (lót tôn phẳng 3 dem) và file Excel bóc tách từng thanh cắt, sơ đồ pha cắt cây 6 m, vật tư cần mua. Miễn phí, chạy trên trình duyệt.">
+  <meta name="theme-color" content="#0B2545">
+  <link rel="canonical" href="https://datnho0804-gif.github.io/CSA/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="vi_VN">
+  <meta property="og:title" content="Thiết kế khung bảng hiệu – xuất PDF bản vẽ & Excel bóc tách">
+  <meta property="og:description" content="Nhập dài × rộng + quy cách sắt hộp → bản vẽ khung, bảng cắt từng thanh, pha cắt cây 6 m, vật tư cần mua. Miễn phí.">
+  <meta property="og:url" content="https://datnho0804-gif.github.io/CSA/">
+  <meta property="og:image" content="https://datnho0804-gif.github.io/CSA/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23005BAC'/%3E%3Cpath d='M6 9h20v12H6z' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M12 9v12M19 9v12M6 15h20' stroke='%23fff' stroke-width='1.5'/%3E%3Cpath d='M9 21l-3 6M23 21l3 6' stroke='%23E60012' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 32 32"><path d="M5 8h22v13H5z" fill="none" stroke="#fff" stroke-width="2.2"/><path d="M12 8v13M19 8v13M5 14.5h22" stroke="#fff" stroke-width="1.6"/><path d="M8 21l-3 7M24 21l3 7" stroke="#E60012" stroke-width="2.4"/></svg>
+      </span>
+      <div>
+        <h1>Thiết kế khung bảng hiệu</h1>
+        <p>Sắt hộp mạ kẽm + tôn phẳng 3 dem · bản vẽ · bảng cắt từng thanh · pha cắt cây 6 m · vật tư cần mua</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button type="button" id="btnSample" title="Nạp mẫu bảng hiệu 8 m × 2 m dựng trên mái">Mẫu 8 × 2 m</button>
+      <button type="button" id="btnReset" title="Trả về thông số mặc định">Mặc định</button>
+      <button type="button" id="btnSave" title="Lưu thông số ra file .json">Lưu dự án</button>
+      <label class="btn" title="Mở file .json đã lưu">Mở dự án<input type="file" id="fileOpen" accept=".json,application/json" hidden></label>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel" aria-label="Thông số thiết kế">
+      <form id="form" autocomplete="off" onsubmit="return false">
+        <section class="quick" aria-label="Thông số chính">
+          <h2>Thông số chính</h2>
+          <div class="grid2">
+            <label class="f">Chiều dài (mm)<input type="number" data-k="L" min="0" step="any" value="8000" inputmode="decimal" required></label>
+            <label class="f">Chiều rộng (mm)<input type="number" data-k="H" min="0" step="any" value="2000" inputmode="decimal" required></label>
+          </div>
+          <label class="f">Quy cách sắt hộp
+            <select data-k="steel" id="steelSel"><option value="auto">Tự động – đề xuất theo kích thước</option></select>
+          </label>
+          <p class="hint" id="ruleHint">Tự động: bảng ≤ 8 m × 2 m dùng hộp mạ kẽm 20×20×1.2; lớn hơn tự chọn quy cách tối ưu.</p>
+          <div class="quick-actions">
+            <button type="button" class="primary big" id="btnPdfMain">Xuất PDF thiết kế</button>
+            <button type="button" class="green big" id="btnXlsxMain">Xuất Excel bóc tách</button>
+          </div>
+          <p class="hint status" id="exportMsg" role="status"></p>
+        </section>
+
+        <details class="adv">
+          <summary>Tùy chọn nâng cao (không bắt buộc)</summary>
+          <div class="adv-body">
+        <details>
+          <summary>Lưới khung &amp; khổ giấy</summary>
+          <div class="fields">
+            <div class="grid2">
+              <label class="f">Bước ô lưới (mm)<input type="number" data-k="grid" min="300" max="1500" step="10" value="1000"></label>
+              <label class="f">Khổ giấy bản vẽ
+                <select data-k="paper"><option value="A3">A3</option><option value="A2">A2</option><option value="A1">A1</option></select>
+              </label>
+            </div>
+            <p class="hint">Bước ô 1000 mm để mối giáp mí tôn khổ 1 m nằm đúng trên thanh khung.</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Lắp đặt &amp; hệ chống</summary>
+          <div class="fields">
+            <div class="seg" role="radiogroup" aria-label="Kiểu lắp đặt">
+              <label><input type="radio" name="mount" data-k="mount" value="roof" checked>Dựng trên mái – chống xiên</label>
+              <label><input type="radio" name="mount" data-k="mount" value="wall">Áp tường – bắt pát</label>
+            </div>
+            <div class="grid2">
+              <label class="f">Bước chống / pát
+                <select data-k="strut.spacing">
+                  <option value="auto">Tự động (tối ưu)</option>
+                  <option value="1">Mọi thanh đứng</option>
+                  <option value="2">Cách 1 thanh đứng</option>
+                  <option value="3">Cách 2 thanh đứng</option>
+                </select>
+              </label>
+              <label class="f">Tầm vươn chân chống (mm)<input type="number" data-k="strut.reach" min="0" step="50" placeholder="tự động = 0,75H"></label>
+              <label class="f">Cao độ nút chống (mm)<input type="number" data-k="strut.attach" min="0" step="10" placeholder="tự động = 0,75H"></label>
+              <label class="f">Chân chống cao hơn chân bảng (mm)<input type="number" data-k="strut.drop" step="10" value="0" title="Âm nếu mái thấp hơn chân bảng"></label>
+            </div>
+            <label class="chk"><input type="checkbox" data-k="strut.endBracing" checked> Giằng chéo đầu hồi (C6) chống xô dọc bảng</label>
+          </div>
+        </details>
+
+        <details>
+          <summary>Đèn pha chiếu bảng</summary>
+          <div class="fields">
+            <label class="chk"><input type="checkbox" data-k="lamps.enabled" checked> Có cần đèn pha LED</label>
+            <div class="grid2">
+              <label class="f">Số đèn (0 = tự động)<input type="number" data-k="lamps.count" min="0" max="60" step="1" value="0"></label>
+              <label class="f">Công suất đèn (W)<input type="number" data-k="lamps.power" min="10" step="10" value="100"></label>
+              <label class="f">Cần đứng D1 (mm)<input type="number" data-k="lamps.rise" min="100" step="10" value="500"></label>
+              <label class="f">Cần vươn D2 (mm)<input type="number" data-k="lamps.reach" min="100" step="10" value="700"></label>
+            </div>
+          </div>
+        </details>
+
+        <details>
+          <summary>Mặt bảng – tôn phẳng</summary>
+          <div class="fields">
+            <p class="fixed">Tôn phẳng mạ màu 3 dem (0,30 mm), khổ 1 m – áp dụng cố định</p>
+            <div class="grid2">
+              <label class="f">Hướng trải tôn
+                <select data-k="face.orientation">
+                  <option value="auto">Tự động (ít hao hụt)</option>
+                  <option value="h">Trải ngang</option>
+                  <option value="v">Trải đứng</option>
+                </select>
+              </label>
+              <label class="f">Liên kết tôn
+                <select data-k="face.fastener">
+                  <option value="rivet">Đinh rút nhôm Ø4×12</option>
+                  <option value="screw">Vít đầu dù 4.2×13</option>
+                </select>
+              </label>
+              <label class="f">Bước liên kết (mm)
+                <select data-k="face.pitch">
+                  <option value="auto">Tự động theo gió</option>
+                  <option value="250">250</option><option value="200">200</option><option value="150">150</option><option value="100">100</option>
+                </select>
+              </label>
+              <label class="f">Dư cắt mỗi đầu tấm (mm)<input type="number" data-k="face.allowance" min="0" max="300" step="10" value="50"></label>
+            </div>
+            <label class="chk"><input type="checkbox" data-k="face.hiflex"> Bọc bạt Hiflex in bên ngoài</label>
+            <label class="chk"><input type="checkbox" data-k="face.edgeTrim"> Nẹp viền chu vi (V nhôm 20×20)</label>
+            <label class="chk"><input type="checkbox" data-k="face.jointCover"> Nẹp che mối giáp mí tôn</label>
+          </div>
+        </details>
+
+        <details>
+          <summary>Tải gió (TCVN 2737 – sơ bộ)</summary>
+          <div class="fields">
+            <div class="grid2">
+              <label class="f">Vùng áp lực gió
+                <select data-k="wind.zone">
+                  <option value="I-A">I-A (55 daN/m²)</option><option value="I">I (65)</option>
+                  <option value="II-A" selected>II-A (83)</option><option value="II">II (95)</option>
+                  <option value="III-A">III-A (110)</option><option value="III">III (125)</option>
+                  <option value="IV">IV (155)</option><option value="V">V (185)</option>
+                </select>
+              </label>
+              <label class="f">Dạng địa hình
+                <select data-k="wind.terrain">
+                  <option value="A">A – trống trải</option><option value="B" selected>B – ngoại ô</option><option value="C">C – nội đô</option>
+                </select>
+              </label>
+              <label class="f">Chân bảng cao (m)<input type="number" data-k="wind.baseHeight" min="0" step="0.5" value="5"></label>
+              <label class="f">Hệ số khí động c<input type="number" data-k="wind.c" min="0.5" max="3" step="0.1" value="1.4"></label>
+              <label class="f">W0 tự nhập (kN/m², 0 = theo vùng)<input type="number" data-k="wind.W0" min="0" step="0.01" value="0"></label>
+              <label class="f">Hệ số vượt tải γ<input type="number" data-k="wind.gamma" min="1" max="2" step="0.05" value="1.2"></label>
+            </div>
+          </div>
+        </details>
+
+        <details>
+          <summary>Vật liệu &amp; tối ưu</summary>
+          <div class="fields">
+            <label class="f">Khi quy cách = Tự động
+              <select data-k="material">
+                <option value="rule">Theo quy tắc (≤ 8×2 m: hộp 20×20×1.2)</option>
+                <option value="free">Tối ưu tự do mọi kích thước</option>
+              </select>
+            </label>
+            <div class="grid2">
+              <label class="f">Cây dự phòng<input type="number" data-k="purchase.spareBars" min="0" max="10" step="1" value="1"></label>
+              <label class="f">Giá thép hộp (đ/kg)<input type="number" data-k="cost.steel" min="0" step="500" value="24000"></label>
+              <label class="f">Chi phí 1 mối hàn (đ)<input type="number" data-k="cost.joint" min="0" step="500" value="5000"></label>
+              <label class="f">Chi phí 1 chân chống (đ)<input type="number" data-k="cost.foot" min="0" step="1000" value="60000"></label>
+              <label class="f">Chi phí 1 pát tường (đ)<input type="number" data-k="cost.anchor" min="0" step="1000" value="25000"></label>
+              <label class="f">Tải 1 tắc kê M8 (kN)<input type="number" data-k="anchors.baseCap" min="0.1" step="0.1" value="1.5"></label>
+              <label class="f">Tải 1 vít mái (kN)<input type="number" data-k="anchors.roofScrewCap" min="0.1" step="0.1" value="0.8"></label>
+              <label class="f">Tải 1 đinh/vít tôn (kN)<input type="number" data-k="face.capacity" min="0.05" step="0.01" value="0.25"></label>
+            </div>
+            <p class="hint">Đơn giá chỉ dùng để so sánh phương án khi tối ưu (thép + mối hàn + chân chống/pát). Sửa theo báo giá thực tế.</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Thông tin bản vẽ</summary>
+          <div class="fields">
+            <label class="f">Công trình / hạng mục<input type="text" data-k="project.name" value="Bảng hiệu"></label>
+            <div class="grid2">
+              <label class="f">Mã hiệu<input type="text" data-k="project.code" value="KT-BH"></label>
+              <label class="f">Ngày<input type="text" data-k="project.date" placeholder="dd/mm/yyyy"></label>
+            </div>
+            <label class="f">Người lập<input type="text" data-k="project.author" value=""></label>
+          </div>
+        </details>
+          </div>
+        </details>
+      </form>
+    </aside>
+
+    <section class="content" aria-live="polite">
+      <div class="regime" id="regime">Đang tính…</div>
+      <div class="cards" id="cards"></div>
+      <div class="warnings" id="warnings"></div>
+
+      <nav class="tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="true" data-tab="draw">Bản vẽ</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="cut">Cắt thép &amp; pha cắt</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="buy">Vật tư cần mua</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="check">Kiểm tra kết cấu</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="help">Hướng dẫn</button>
+      </nav>
+
+      <div class="tabpanel" id="tab-draw" role="tabpanel">
+        <div class="toolbar">
+          <button type="button" class="primary" id="btnPdfFile">Tải PDF</button>
+          <button type="button" id="btnDxf">Tải DXF (AutoCAD)</button>
+          <button type="button" id="btnPdf">In</button>
+          <button type="button" id="btnSvg">Tải SVG</button>
+          <button type="button" id="btnPng">Tải PNG</button>
+          <span class="sp"></span>
+          <span class="zoom">
+            <button type="button" id="zoomOut" aria-label="Thu nhỏ">−</button>
+            <span id="zoomVal">100%</span>
+            <button type="button" id="zoomIn" aria-label="Phóng to">+</button>
+            <button type="button" id="zoomFit">Vừa khung</button>
+          </span>
+        </div>
+        <div id="sheets" class="sheets"></div>
+      </div>
+
+      <div class="tabpanel" id="tab-cut" role="tabpanel" hidden>
+        <div class="toolbar">
+          <button type="button" class="primary" id="btnXlsx">Xuất Excel (.xlsx)</button>
+          <button type="button" id="btnCsv">Xuất CSV</button>
+          <span class="muted" id="xlsxNote"></span>
+        </div>
+        <div id="cutView"></div>
+      </div>
+
+      <div class="tabpanel" id="tab-buy" role="tabpanel" hidden>
+        <div class="toolbar">
+          <button type="button" class="primary" id="btnXlsx2">Xuất Excel (.xlsx)</button>
+          <button type="button" id="btnCopyBuy">Sao chép danh sách</button>
+        </div>
+        <div id="buyView"></div>
+      </div>
+
+      <div class="tabpanel" id="tab-check" role="tabpanel" hidden>
+        <div id="checkView"></div>
+      </div>
+
+      <div class="tabpanel help" id="tab-help" role="tabpanel" hidden>
+        <h3>Cách dùng</h3>
+        <ol>
+          <li>Nhập <b>chiều dài × chiều rộng</b> bảng hiệu (mm; gõ số nhỏ hơn 100 sẽ hiểu là mét, ví dụ 8 = 8000 mm) và chọn <b>quy cách sắt hộp</b>.</li>
+          <li>Bấm <b>Xuất PDF thiết kế</b> (bản vẽ + bảng kê + pha cắt + vật tư, khổ A3) và <b>Xuất Excel bóc tách</b>. Các tùy chọn khác đã có giá trị mặc định, chỉ sửa khi cần trong mục “Tùy chọn nâng cao”.</li>
+          <li>Tab <b>Bản vẽ</b>: xem tờ bản vẽ A3; tải <b>DXF</b> để mở bằng AutoCAD (vẽ tỷ lệ 1:1, đơn vị mm), <b>In / Lưu PDF</b> để in khổ A3 ngang.</li>
+          <li>Tab <b>Cắt thép &amp; pha cắt</b>: danh sách từng thanh (ký hiệu, quy cách, dài cắt, số lượng, vị trí lắp) và sơ đồ pha cắt từng cây 6 m.</li>
+          <li>Tab <b>Vật tư cần mua</b>: số cây thép theo quy cách, số mét tôn, đinh rút/vít, bát, tắc kê, que hàn… Xuất Excel để gửi mua hàng.</li>
+        </ol>
+        <h3>Quy tắc chọn vật liệu</h3>
+        <ul>
+          <li>Bảng dài ≤ 8 m và cao ≤ 2 m: toàn bộ khung, thanh chống, giằng dùng <b>hộp mạ kẽm 20×20×1.2</b>. Thanh đứng chính chịu lực lớn được ốp lưng thêm 1 thanh 20×20×1.2 (C5) khi kiểm tra gió yêu cầu.</li>
+          <li>Bảng lớn hơn: chương trình thử các bước chống (mỗi 1–4 khoang) và các quy cách hộp vuông/chữ nhật thông dụng, chọn phương án <b>đạt kiểm tra gió</b> có <b>chi phí so sánh thấp nhất</b> (thép theo số cây phải mua + mối hàn + chân chống/pát).</li>
+          <li>Mặt bảng luôn là <b>tôn phẳng 3 dem (0,30 mm) khổ 1 m</b>, giáp mí trên tim thanh khung; bước ô mặc định 1000 mm để mối tôn trùng thanh.</li>
+        </ul>
+        <h3>Ký hiệu thanh</h3>
+        <ul>
+          <li><b>K1</b> thanh ngang bao trên/dưới · <b>K2</b> thanh đứng chính (tại tuyến chống/pát) · <b>K3</b> thanh ngang giữa · <b>K4</b> thanh đứng phụ.</li>
+          <li><b>C1</b> chống xiên · <b>C2</b> giằng K · <b>C3</b> giằng dọc · <b>C4</b> chân dọc trên mái · <b>C5</b> ốp lưng · <b>C6</b> giằng chéo đầu hồi · <b>D1/D2</b> cần đèn.</li>
+          <li>Chiều dài cắt tính theo mép thanh (thanh hàn đối đầu); thanh xiên tính theo tim, cắt vát 2 đầu và đo lại trước khi cắt.</li>
+        </ul>
+        <h3>Lưu ý</h3>
+        <ul>
+          <li>Kiểm tra kết cấu theo tải gió TCVN 2737 ở mức sơ bộ (khung phẳng 2D, đường cong ổn định EC3-c). Không thay thế thiết kế kết cấu chính thức – bảng lớn hoặc vùng gió mạnh cần kỹ sư kết cấu kiểm tra.</li>
+          <li>Số que hàn, đá cắt, sơn kẽm lạnh là ước tính theo số mối hàn/vết cắt.</li>
+          <li>Thông số được lưu trong trình duyệt; dùng <b>Lưu dự án</b> để giữ file .json cho từng công trình.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+  <footer class="foot">Phiên bản 1.0 (11/2026) · Công cụ tính sơ bộ – kiểm tra lại số liệu trước khi gia công · Toàn bộ tính toán chạy trong trình duyệt, không gửi dữ liệu đi đâu · <a href="https://github.com/datnho0804-gif/CSA" rel="noopener">Mã nguồn &amp; góp ý trên GitHub</a></footer>
+  <div id="print-root" aria-hidden="true"></div>
+
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/cutting.js"></script>
+  <script src="assets/js/design.js"></script>
+  <script src="assets/js/drawing.js"></script>
+  <script src="assets/js/export.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

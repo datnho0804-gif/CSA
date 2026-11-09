@@ -1,0 +1,16 @@
+{
+  "name": "Thiết kế khung bảng hiệu",
+  "short_name": "Khung bảng hiệu",
+  "description": "Nhập dài × rộng + quy cách sắt hộp → xuất PDF bản vẽ khung bảng hiệu và Excel bóc tách vật tư.",
+  "lang": "vi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F3F5F9",
+  "theme_color": "#0B2545",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
