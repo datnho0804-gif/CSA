@@ -25,6 +25,7 @@
       fastener: 'rivet', pitch: 'auto', capacity: 0.25,
     },
     material: 'rule', // rule: <= 8m x 2m dùng hộp 20x20x1.2 | free: tối ưu tự do
+    steel: 'auto', // 'auto' hoặc mã quy cách người dùng chọn (vd '25x25x1.2') – dùng cho toàn bộ khung
     cost: { steel: 24000, joint: 5000, foot: 60000, anchor: 25000 },
     purchase: { spareBars: 1 },
     anchors: { baseCap: 1.5, roofScrewCap: 0.8 },
@@ -57,6 +58,7 @@
     p.grid = U.clamp(Math.round(num(p.grid, 1000)), 300, 1500);
     p.mount = p.mount === 'wall' ? 'wall' : 'roof';
     p.material = p.material === 'free' ? 'free' : 'rule';
+    p.steel = p.steel && p.steel !== 'auto' && CAT.byId[p.steel] ? p.steel : 'auto';
     p.strut.attach = Math.max(0, num(p.strut.attach, 0));
     p.strut.reach = Math.max(0, num(p.strut.reach, 0));
     p.strut.drop = num(p.strut.drop, 0);
@@ -293,7 +295,8 @@
         const M = Math.max(...fs.map((f) => f.M));
         const lam = Lb / secStrut.r;
         const chi = SB.buckling.chi(lam);
-        const util = lam > 200 ? 99 : N / (chi * secStrut.A * ST.f) + M / (secStrut.W * ST.f);
+        // độ mảnh vượt 200 coi như không đạt: hệ số sử dụng tối thiểu = λ/200
+        const util = Math.max(N / (chi * secStrut.A * ST.f) + M / (secStrut.W * ST.f), lam > 200 ? lam / 200 : 0);
         return { N, M, lam, chi, util, Lb };
       };
       // có giằng K: chiều dài tính toán = 1/2 thanh (giằng K trong mặt phẳng, giằng dọc C3 ngoài mặt phẳng)
@@ -428,9 +431,9 @@
     // Cần đèn
     const lamps = lampPositions(p, geo);
     if (lamps.length) {
-      const base = CAT.get(CAT.BASE);
-      add('D1', 'Cần đèn – đoạn đứng (hàn lên ray bao trên)', base, p.lamps.rise, lamps.length, { loc: lamps.map((l) => geo.axesV[l.i]).join(', ') });
-      add('D2', 'Cần đèn – đoạn vươn ra trước (cắt vát 45°)', base, p.lamps.reach, lamps.length, { loc: 'Gắn đèn pha ở đầu', joints: 1 });
+      const lampSec = p.steel !== 'auto' ? CAT.get(p.steel) : CAT.get(CAT.BASE);
+      add('D1', 'Cần đèn – đoạn đứng (hàn lên ray bao trên)', lampSec, p.lamps.rise, lamps.length, { loc: lamps.map((l) => geo.axesV[l.i]).join(', ') });
+      add('D2', 'Cần đèn – đoạn vươn ra trước (cắt vát 45°)', lampSec, p.lamps.reach, lamps.length, { loc: 'Gắn đèn pha ở đầu', joints: 1 });
     }
     return { pieces, xc, strut, lamps, splices };
   }
@@ -668,16 +671,19 @@
 
   function optimize(p, geo, q, warnings) {
     const base = CAT.get(CAT.BASE);
-    const ruleApplies = p.material === 'rule' && p.L <= RULE_L && p.H <= RULE_H;
+    const fixed = p.steel !== 'auto' ? CAT.get(p.steel) : null;
+    const ruleApplies = !fixed && p.material === 'rule' && p.L <= RULE_L && p.H <= RULE_H;
     const byKg = (arr) => [...arr].sort((a, b) => a.kgm - b.kgm || a.A - b.A);
-    const pools = (rule) => rule ? {
-      perim: [base], int: [base], sub: [base], col: [base, CAT.backed(base)], strut: [base],
-    } : {
-      perim: byKg(CAT.list), int: byKg(CAT.list), sub: byKg(CAT.list.filter((s) => s.b <= 25 && s.h <= 25)),
-      col: byKg([...CAT.list, CAT.backed(base)]), strut: byKg(CAT.square()),
+    const pools = (mode) => {
+      if (mode === 'fixed') return { fill: fixed, perim: [fixed], int: [fixed], sub: [fixed], col: [fixed, CAT.backed(fixed)], strut: [fixed] };
+      if (mode === 'rule') return { fill: base, perim: [base], int: [base], sub: [base], col: [base, CAT.backed(base)], strut: [base] };
+      return {
+        fill: base, perim: byKg(CAT.list), int: byKg(CAT.list), sub: byKg(CAT.list.filter((s) => s.b <= 25 && s.h <= 25)),
+        col: byKg([...CAT.list, CAT.backed(base)]), strut: byKg(CAT.square()),
+      };
     };
-    const run = (rule) => {
-      const P = pools(rule);
+    const run = (mode) => {
+      const P = pools(mode);
       const maxK = Math.max(1, Math.min(6, geo.nV - 1));
       const ks = p.strut.spacing === 'auto' ? [1, 2, 3, 4].filter((k) => k <= maxK) : [U.clamp(Number(p.strut.spacing) || 1, 1, maxK)];
       const results = [];
@@ -686,16 +692,16 @@
         const twoWay = cols.length === geo.nV;
         const perim = lightest(P.perim, (s) => { const r = railChecks(geo, cols, q.N, p.wind.gamma, s, null); return r.perim.util <= 1; });
         if (!perim) continue;
-        const railInt = geo.nR > 2 ? lightest(P.int, (s) => railChecks(geo, cols, q.N, p.wind.gamma, perim, s).int.util <= 1) : base;
+        const railInt = geo.nR > 2 ? lightest(P.int, (s) => railChecks(geo, cols, q.N, p.wind.gamma, perim, s).int.util <= 1) : P.fill;
         if (!railInt) continue;
-        const sub = twoWay ? base : lightest(P.sub, (s) => { const r = subCheck(geo, cols, q.N, p.wind.gamma, s); return !r || r.util <= 1; });
+        const sub = twoWay ? P.fill : lightest(P.sub, (s) => { const r = subCheck(geo, cols, q.N, p.wind.gamma, s); return !r || r.util <= 1; });
         if (!sub) continue;
         const xs = cols.map((i) => geo.xLines[i]);
         const spans = xs.slice(1).map((x, n) => x - xs[n]);
         const tribEnd = Math.max(spans[0], spans[spans.length - 1]) / 2;
         let tribInt = 0;
         for (let n = 1; n < xs.length - 1; n++) tribInt = Math.max(tribInt, (spans[n - 1] + spans[n]) / 2);
-        const strutPool = p.mount === 'roof' ? P.strut : [base];
+        const strutPool = p.mount === 'roof' ? P.strut : [P.fill];
         for (const strut of strutPool) {
           const okLine = (sec, trib, isEnd) => {
             const sg = strutGeom(p, geo, sec.h, strut);
@@ -704,8 +710,8 @@
             const u = Math.max(r.col.util, r.defl.util, r.strut ? r.strut.util : 0, r.k ? r.k.util : 0);
             return u <= 1;
           };
-          // ốp lưng chỉ dùng khi ray bao sâu không quá 20 mm
-          const colPool = P.col.filter((s) => !s.composite || perim.h <= 20);
+          // ốp lưng chỉ dùng khi ray bao không sâu hơn thanh đứng (ốp nằm sau, chạy suốt chiều cao)
+          const colPool = P.col.filter((s) => !s.composite || perim.h <= s.h / 2);
           const colEnd = lightest(colPool, (s) => okLine(s, tribEnd, true));
           if (!colEnd) continue;
           const colInt = tribInt > 0 ? lightest(colPool, (s) => okLine(s, tribInt, false)) : colEnd;
@@ -717,20 +723,38 @@
       }
       return results.sort((a, b) => a.cost - b.cost || a.kg - b.kg);
     };
+    const secTxt = (alt) => [...new Set([alt.cfg.sec.perim, alt.cfg.sec.railInt, alt.cfg.sec.colInt, alt.cfg.sec.colEnd, alt.cfg.sec.strut]
+      .map((s) => s.name.replace('Hộp ', '')))].join(' + ');
+    if (fixed) {
+      let results = run('fixed');
+      let regime = 'fixed';
+      if (!results.length) {
+        regime = 'fixed-fail';
+        const cols = colIndices(geo.nV, 1);
+        const backed = CAT.backed(fixed);
+        const cfg = { k: 1, cols, sec: { perim: fixed, railInt: fixed, sub: fixed, colEnd: backed, colInt: backed, strut: fixed } };
+        results = [Object.assign({ cfg }, costOf(p, geo, cfg))];
+        const sug = run(p.L <= RULE_L && p.H <= RULE_H ? 'rule' : 'free');
+        const alt = sug.length ? sug[0] : run('free')[0];
+        warnings.push(`Quy cách ${fixed.name} KHÔNG đủ chịu tải gió vùng ${p.wind.zone} ngay cả khi chống tại mọi thanh đứng và ốp lưng – bản vẽ vẫn lập theo quy cách đã chọn để tham khảo.`
+          + (alt ? ` Đề xuất thay bằng: ${secTxt(alt)} (chống mỗi ${alt.cfg.k} khoang).` : ''));
+      }
+      return { regime, best: results[0], alternatives: results.slice(0, 8) };
+    }
     let regime = ruleApplies ? 'rule' : 'free';
-    let results = run(ruleApplies);
+    let results = run(ruleApplies ? 'rule' : 'free');
     if (!results.length && ruleApplies) {
       warnings.push(p.strut.spacing === 'auto'
         ? 'Với tải gió đã chọn, hộp 20×20×1.2 không đủ chịu lực ngay cả khi chống/bắt pát tại mọi thanh đứng – đã chuyển sang tối ưu vật liệu.'
         : `Với bước chống/pát đã chọn (mỗi ${p.strut.spacing} khoang), hộp 20×20×1.2 không đủ chịu lực – đã chuyển sang tối ưu vật liệu. Chọn bước "Tự động" để giữ hộp 20×20×1.2.`);
       regime = 'free-fallback';
-      results = run(false);
+      results = run('free');
     }
     if (!results.length) {
       warnings.push('Không tìm được phương án đạt kiểm tra trong danh mục thép hộp – cần thiết kế kết cấu riêng (tăng số chống, giảm bước ô hoặc dùng thép hình).');
       const cols = colIndices(geo.nV, 1);
       const big = CAT.get('60x60x1.8');
-      const cfg = { k: 1, cols, sec: { perim: big, railInt: big, sub: base, colEnd: CAT.get('50x100x2'), colInt: CAT.get('50x100x2'), strut: big } };
+      const cfg = { k: 1, cols, sec: { perim: big, railInt: big, sub: base, colEnd: CAT.get('50x100x2.0'), colInt: CAT.get('50x100x2.0'), strut: big } };
       results = [Object.assign({ cfg }, costOf(p, geo, cfg))];
       regime = 'none';
     }
@@ -743,15 +767,15 @@
   function purchaseList(p, geo, res) {
     const rows = [];
     const r2 = (v) => Math.round(v * 100) / 100;
-    const add = (group, name, spec, unit, qtyNet, qtyBuy, note) => rows.push({ group, name, spec, unit, qtyNet: r2(qtyNet), qtyBuy: r2(qtyBuy), note: note || '' });
+    const add = (group, name, spec, unit, qtyNet, qtyBuy, note, extra) => rows.push(Object.assign({ group, name, spec, unit, qtyNet: r2(qtyNet), qtyBuy: r2(qtyBuy), note: note || '' }, extra || {}));
     // thép
     const plans = res.cut;
     const mainSec = [...plans].sort((a, b) => b.plan.nBars - a.plan.nBars)[0];
     for (const c of plans) {
       const spare = c === mainSec ? p.purchase.spareBars : 0;
       const n = c.plan.nBars + spare;
-      add('Thép hộp', `Thép hộp mạ kẽm ${c.sec.b}×${c.sec.h}×${c.sec.t}`, 'Cây 6 m', 'cây', c.plan.nBars, n,
-        `${U.fmt(n * 6 * c.sec.kgm, 1)} kg; tịnh ${U.fmt(c.netLen / 1000, 2)} m${spare ? `; +${spare} cây dự phòng` : ''}`);
+      add('Thép hộp', `Thép hộp mạ kẽm ${c.sec.name.replace('Hộp ', '')}`, 'Cây 6 m', 'cây', c.plan.nBars, n,
+        `${U.fmt(n * 6 * c.sec.kgm, 1)} kg; tịnh ${U.fmt(c.netLen / 1000, 2)} m${spare ? `; +${spare} cây dự phòng` : ''}`, { secId: c.sec.id, kg: n * 6 * c.sec.kgm });
     }
     // tôn
     const f = res.face;
@@ -864,6 +888,9 @@
       free: 'Bảng vượt 8 m × 2 m (hoặc chọn tối ưu tự do) → đã chọn quy cách nhẹ nhất/chi phí thấp nhất đạt kiểm tra gió.',
       'free-fallback': 'Hộp 20×20×1.2 không đạt với tải gió đã chọn → đã chọn quy cách tối ưu khác.',
       none: 'Không có phương án đạt trong danh mục – kết quả chỉ để tham khảo.',
+      fixed: p.steel !== 'auto'
+        ? `Dùng quy cách đã chọn: ${CAT.get(p.steel).name} cho toàn bộ khung, thanh chống và giằng${cfg.sec.colInt.composite || cfg.sec.colEnd.composite ? '; thanh đứng chính ốp lưng thêm 1 thanh cùng quy cách' : ''} – đạt kiểm tra gió.` : '',
+      'fixed-fail': p.steel !== 'auto' ? `Quy cách đã chọn ${CAT.get(p.steel).name} KHÔNG đủ chịu tải gió – xem đề xuất thay thế.` : '',
     }[opt.regime];
     const res = {
       p, geo, wind: w, q, regime: opt.regime, regimeText, cfg, eval: ev, checks: ev.checks,

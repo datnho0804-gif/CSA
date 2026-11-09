@@ -5,7 +5,9 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 globalThis.SB = {};
-for (const f of ['core', 'cutting', 'design', 'drawing']) require(path.join(__dirname, '..', 'docs', 'assets', 'js', `${f}.js`));
+for (const f of ['core', 'cutting', 'design', 'drawing', 'export']) require(path.join(__dirname, '..', 'docs', 'assets', 'js', `${f}.js`));
+require(path.join(__dirname, '..', 'docs', 'assets', 'vendor', 'fonts-tinos.js'));
+const { jsPDF } = require(path.join(__dirname, '..', 'docs', 'assets', 'vendor', 'jspdf.umd.min.js'));
 const SB = globalThis.SB;
 
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg || ''} ${a} ≉ ${b} (±${tol})`);
@@ -133,4 +135,42 @@ test('bản vẽ: tờ A3, hình chiếu nằm trong khổ giấy, SVG và DXF h
     assert.ok(!/[^\x00-\x7F]/.test(dxf), 'DXF chỉ chứa ASCII (tiếng Việt mã hoá \\U+)');
     assert.ok(dxf.includes('\\U+00D4'), 'có chữ Ô mã hoá');
   }
+});
+
+test('quy cách do người dùng chọn: dùng cho toàn bộ khung', () => {
+  const r = SB.design.run({ L: 8000, H: 2000, steel: '25x25x1.2' });
+  assert.equal(r.regime, 'fixed');
+  assert.deepEqual(r.sections.map((x) => x.id), ['25x25x1.2']);
+  assert.ok(r.pieces.every((g) => g.secId === '25x25x1.2'));
+  assert.ok(r.eval.ok);
+  const r2 = SB.design.run({ L: 6000, H: 2000, steel: '30x60x1.4' });
+  assert.equal(r2.regime, 'fixed');
+  assert.ok(r2.pieces.every((g) => g.secId === '30x60x1.4'));
+});
+
+test('quy cách tự chọn không đủ chịu gió: cảnh báo + đề xuất thay thế', () => {
+  const r = SB.design.run({ L: 14000, H: 3000, steel: '20x20x1.0' });
+  assert.equal(r.regime, 'fixed-fail');
+  assert.ok(!r.eval.ok);
+  assert.ok(r.warnings.some((w) => w.includes('Đề xuất thay bằng')));
+  assert.ok(r.pieces.every((g) => g.secId === '20x20x1.0'), 'bản vẽ vẫn theo quy cách đã chọn');
+});
+
+test('danh mục: quy cách 1.0 mm chỉ dùng khi tự chọn, mã quy cách chuẩn', () => {
+  assert.ok(SB.catalog.byId['20x20x1.0'] && SB.catalog.byId['50x100x2.0']);
+  assert.ok(SB.catalog.list.every((x) => x.auto));
+  const o = SB.catalog.options();
+  assert.ok(o.square.length > 10 && o.rect.length > 8);
+  near(SB.catalog.get('20x20x1.2').kgm, 0.708, 0.001, 'kg/m hộp 20×20×1.2');
+});
+
+test('xuất PDF vector: đúng số tờ, nhúng font Tinos', () => {
+  const r = SB.design.run({ L: 8000, H: 2000, project: { name: 'Bảng hiệu GHN' } });
+  const sheets = SB.drawing.composeSheets(r);
+  const doc = SB.exporter.buildPdf(jsPDF, r, sheets, SB.fontsTinos);
+  assert.equal(doc.getNumberOfPages(), sheets.length);
+  const buf = Buffer.from(doc.output('arraybuffer'));
+  assert.equal(buf.subarray(0, 5).toString(), '%PDF-');
+  assert.ok(buf.includes('Tinos'), 'có font Tinos nhúng');
+  assert.ok(buf.length > 20000);
 });

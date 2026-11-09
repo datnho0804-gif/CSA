@@ -30,22 +30,40 @@
   <main class="layout">
     <aside class="panel" aria-label="Thông số thiết kế">
       <form id="form" autocomplete="off" onsubmit="return false">
-        <details open>
-          <summary>Kích thước bảng hiệu</summary>
+        <section class="quick" aria-label="Thông số chính">
+          <h2>Thông số chính</h2>
+          <div class="grid2">
+            <label class="f">Chiều dài (mm)<input type="number" data-k="L" min="0" step="any" value="8000" inputmode="decimal" required></label>
+            <label class="f">Chiều rộng (mm)<input type="number" data-k="H" min="0" step="any" value="2000" inputmode="decimal" required></label>
+          </div>
+          <label class="f">Quy cách sắt hộp
+            <select data-k="steel" id="steelSel"><option value="auto">Tự động – đề xuất theo kích thước</option></select>
+          </label>
+          <p class="hint" id="ruleHint">Tự động: bảng ≤ 8 m × 2 m dùng hộp mạ kẽm 20×20×1.2; lớn hơn tự chọn quy cách tối ưu.</p>
+          <div class="quick-actions">
+            <button type="button" class="primary big" id="btnPdfMain">Xuất PDF thiết kế</button>
+            <button type="button" class="green big" id="btnXlsxMain">Xuất Excel bóc tách</button>
+          </div>
+          <p class="hint status" id="exportMsg" role="status"></p>
+        </section>
+
+        <details class="adv">
+          <summary>Tùy chọn nâng cao (không bắt buộc)</summary>
+          <div class="adv-body">
+        <details>
+          <summary>Lưới khung &amp; khổ giấy</summary>
           <div class="fields">
             <div class="grid2">
-              <label class="f">Chiều dài L (mm)<input type="number" data-k="L" min="500" max="60000" step="10" value="8000" required></label>
-              <label class="f">Chiều cao H (mm)<input type="number" data-k="H" min="300" max="8000" step="10" value="2000" required></label>
               <label class="f">Bước ô lưới (mm)<input type="number" data-k="grid" min="300" max="1500" step="10" value="1000"></label>
               <label class="f">Khổ giấy bản vẽ
                 <select data-k="paper"><option value="A3">A3</option><option value="A2">A2</option><option value="A1">A1</option></select>
               </label>
             </div>
-            <p class="hint" id="ruleHint">Bảng ≤ 8 m × 2 m: dùng hộp mạ kẽm 20×20×1.2. Lớn hơn: tự tối ưu quy cách theo chi phí & khối lượng.</p>
+            <p class="hint">Bước ô 1000 mm để mối giáp mí tôn khổ 1 m nằm đúng trên thanh khung.</p>
           </div>
         </details>
 
-        <details open>
+        <details>
           <summary>Lắp đặt &amp; hệ chống</summary>
           <div class="fields">
             <div class="seg" role="radiogroup" aria-label="Kiểu lắp đặt">
@@ -69,7 +87,7 @@
           </div>
         </details>
 
-        <details open>
+        <details>
           <summary>Đèn pha chiếu bảng</summary>
           <div class="fields">
             <label class="chk"><input type="checkbox" data-k="lamps.enabled" checked> Có cần đèn pha LED</label>
@@ -82,7 +100,7 @@
           </div>
         </details>
 
-        <details open>
+        <details>
           <summary>Mặt bảng – tôn phẳng</summary>
           <div class="fields">
             <p class="fixed">Tôn phẳng mạ màu 3 dem (0,30 mm), khổ 1 m – áp dụng cố định</p>
@@ -142,7 +160,7 @@
         <details>
           <summary>Vật liệu &amp; tối ưu</summary>
           <div class="fields">
-            <label class="f">Chọn vật liệu khung
+            <label class="f">Khi quy cách = Tự động
               <select data-k="material">
                 <option value="rule">Theo quy tắc (≤ 8×2 m: hộp 20×20×1.2)</option>
                 <option value="free">Tối ưu tự do mọi kích thước</option>
@@ -173,6 +191,8 @@
             <label class="f">Người lập<input type="text" data-k="project.author" value=""></label>
           </div>
         </details>
+          </div>
+        </details>
       </form>
     </aside>
 
@@ -191,8 +211,9 @@
 
       <div class="tabpanel" id="tab-draw" role="tabpanel">
         <div class="toolbar">
-          <button type="button" class="primary" id="btnDxf">Tải DXF (AutoCAD)</button>
-          <button type="button" id="btnPdf">In / Lưu PDF</button>
+          <button type="button" class="primary" id="btnPdfFile">Tải PDF</button>
+          <button type="button" id="btnDxf">Tải DXF (AutoCAD)</button>
+          <button type="button" id="btnPdf">In</button>
           <button type="button" id="btnSvg">Tải SVG</button>
           <button type="button" id="btnPng">Tải PNG</button>
           <span class="sp"></span>
@@ -230,7 +251,8 @@
       <div class="tabpanel help" id="tab-help" role="tabpanel" hidden>
         <h3>Cách dùng</h3>
         <ol>
-          <li>Nhập chiều dài, chiều cao bảng hiệu (mm) và kiểu lắp đặt. Kết quả tự tính lại sau mỗi thay đổi.</li>
+          <li>Nhập <b>chiều dài × chiều rộng</b> bảng hiệu (mm; gõ số nhỏ hơn 100 sẽ hiểu là mét, ví dụ 8 = 8000 mm) và chọn <b>quy cách sắt hộp</b>.</li>
+          <li>Bấm <b>Xuất PDF thiết kế</b> (bản vẽ + bảng kê + pha cắt + vật tư, khổ A3) và <b>Xuất Excel bóc tách</b>. Các tùy chọn khác đã có giá trị mặc định, chỉ sửa khi cần trong mục “Tùy chọn nâng cao”.</li>
           <li>Tab <b>Bản vẽ</b>: xem tờ bản vẽ A3; tải <b>DXF</b> để mở bằng AutoCAD (vẽ tỷ lệ 1:1, đơn vị mm), <b>In / Lưu PDF</b> để in khổ A3 ngang.</li>
           <li>Tab <b>Cắt thép &amp; pha cắt</b>: danh sách từng thanh (ký hiệu, quy cách, dài cắt, số lượng, vị trí lắp) và sơ đồ pha cắt từng cây 6 m.</li>
           <li>Tab <b>Vật tư cần mua</b>: số cây thép theo quy cách, số mét tôn, đinh rút/vít, bát, tắc kê, que hàn… Xuất Excel để gửi mua hàng.</li>

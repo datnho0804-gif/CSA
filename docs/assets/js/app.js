@@ -13,6 +13,18 @@
   let res = null;
   let sheets = null;
   let zoom = 'fit';
+  let dirty = true;
+
+  /** Ô chọn quy cách sắt hộp – sinh từ danh mục */
+  function fillSteel() {
+    const sel = $('#steelSel');
+    if (!sel || sel.options.length > 1) return;
+    const o = SB.catalog.options();
+    const opt = (s) => `<option value="${s.id}">${s.name.replace('Hộp ', s.shape === 'SHS' ? 'Hộp vuông ' : 'Hộp chữ nhật ')} (${U.fmt(s.kgm, 3)} kg/m)</option>`;
+    sel.insertAdjacentHTML('beforeend', `<optgroup label="Hộp vuông mạ kẽm">${o.square.map(opt).join('')}</optgroup>`
+      + `<optgroup label="Hộp chữ nhật mạ kẽm (cạnh dài vuông góc mặt bảng)">${o.rect.map(opt).join('')}</optgroup>`);
+  }
+  const msg = (t) => { ['#exportMsg', '#xlsxNote'].forEach((id) => { const el = $(id); if (el) el.textContent = t; }); };
 
   /* ------------------------------ biểu mẫu ------------------------------ */
   const getPath = (o, path) => path.split('.').reduce((a, k) => (a === null || a === undefined ? undefined : a[k]), o);
@@ -27,9 +39,12 @@
     for (const el of $$('[data-k]', form)) {
       if (el.type === 'radio') { if (el.checked) setPath(o, el.dataset.k, el.value); continue; }
       if (el.type === 'checkbox') { setPath(o, el.dataset.k, el.checked); continue; }
-      const v = String(el.value).trim();
+      const v = String(el.value).trim().replace(',', '.');
       if (v === '') continue;
-      setPath(o, el.dataset.k, el.type === 'number' ? Number(v) : v);
+      let val = el.type === 'number' ? Number(v) : v;
+      // kích thước gõ nhỏ hơn 100 được hiểu là mét (8 → 8000 mm)
+      if ((el.dataset.k === 'L' || el.dataset.k === 'H') && val > 0 && val < 100) val = Math.round(val * 1000);
+      setPath(o, el.dataset.k, val);
     }
     return o;
   }
@@ -54,6 +69,7 @@
 
   /* ------------------------------ tính toán ----------------------------- */
   function run() {
+    dirty = false;
     const t0 = performance.now();
     try {
       res = SB.design.run(readForm());
@@ -68,7 +84,8 @@
     document.body.dataset.ms = String(Math.round(performance.now() - t0));
   }
   let timer = null;
-  const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 280); };
+  const schedule = () => { dirty = true; clearTimeout(timer); timer = setTimeout(run, 280); };
+  const flush = () => { if (dirty) { clearTimeout(timer); run(); } };
 
   /* ------------------------------ hiển thị ------------------------------ */
   function renderAll() {
@@ -82,9 +99,15 @@
   function renderSummary() {
     const p = res.p;
     const rule = p.L <= SB.design.RULE_L && p.H <= SB.design.RULE_H;
-    $('#ruleHint').textContent = rule
-      ? `Bảng ${U.fmt(p.L / 1000, 2)} × ${U.fmt(p.H / 1000, 2)} m ≤ 8 × 2 m → hộp mạ kẽm 20×20×1.2.`
-      : `Bảng ${U.fmt(p.L / 1000, 2)} × ${U.fmt(p.H / 1000, 2)} m > 8 × 2 m → tự chọn quy cách tối ưu chi phí & khối lượng.`;
+    const dims = `Bảng ${U.fmt(p.L / 1000, 2)} × ${U.fmt(p.H / 1000, 2)} m`;
+    let hint;
+    if (p.steel !== 'auto') {
+      const nm = SB.catalog.get(p.steel).name;
+      hint = res.regime === 'fixed' ? `${dims}: dùng ${nm} cho toàn bộ khung – đạt kiểm tra gió.` : `${dims}: ${nm} KHÔNG đủ chịu gió – xem cảnh báo và quy cách đề xuất.`;
+    } else {
+      hint = rule ? `${dims} ≤ 8 × 2 m → hộp mạ kẽm 20×20×1.2.` : `${dims} > 8 × 2 m → tự chọn quy cách tối ưu chi phí & khối lượng.`;
+    }
+    $('#ruleHint').textContent = hint;
     $('#regime').innerHTML = `${esc(res.regimeText)}<small>${res.geo.nCells} ô lưới ${U.mm(res.geo.g)}×${U.mm(res.geo.g)} · gió vùng ${esc(p.wind.zone)}: q = ${U.fmt(res.wind.qtt, 2)} kN/m² · ${p.mount === 'roof' ? `chống xiên tại ${res.cfg.cols.length} thanh đứng chính` : `pát tường tại ${res.cfg.cols.length} thanh đứng chính`}</small>`;
     const steelRows = res.purchase.filter((r) => r.group === 'Thép hộp');
     const bars = U.sum(steelRows, (r) => r.qtyBuy);
@@ -93,7 +116,7 @@
     const ok = res.eval.ok;
     const spanTxt = res.cfg.cols.length > 1 ? `bước ${U.fmt(res.cfg.k * res.geo.g / 1000, 2)} m` : '';
     $('#cards').innerHTML = [
-      `<div class="card"><div class="k">Vật liệu khung</div><div class="chips">${res.sections.map((s) => `<span class="chip">${esc(s.name.replace('Hộp ', ''))}</span>`).join('')}</div><div class="s">${res.regime === 'rule' ? 'theo quy tắc ≤ 8×2 m' : 'tối ưu chi phí & khối lượng'}</div></div>`,
+      `<div class="card"><div class="k">Vật liệu khung</div><div class="chips">${res.sections.map((s) => `<span class="chip">${esc(s.name.replace('Hộp ', ''))}</span>`).join('')}</div><div class="s">${res.regime === 'rule' ? 'theo quy tắc ≤ 8×2 m' : res.regime.startsWith('fixed') ? 'quy cách đã chọn' : 'tối ưu chi phí & khối lượng'}</div></div>`,
       `<div class="card"><div class="k">Thép hộp cần mua</div><div class="v">${bars} cây 6 m</div><div class="s">≈ ${U.fmt(kg, 1)} kg · tịnh ${U.fmt(res.totals.netLen, 1)} m (${res.totals.pieces} thanh)</div></div>`,
       `<div class="card"><div class="k">Tôn phẳng 3 dem khổ 1 m</div><div class="v">${U.fmt(res.face.buyM, 1)} m dài</div><div class="s">${res.face.strips.length} tấm · ${U.fmt(res.face.areaBuy, 2)} m² · ≈ ${U.fmt(res.face.kg, 1)} kg</div></div>`,
       p.mount === 'roof'
@@ -217,9 +240,10 @@
   $('#zoomFit').addEventListener('click', () => { zoom = 'fit'; applyZoom(); });
 
   const base = () => SB.exporter.fileBase(res);
-  $('#btnDxf').addEventListener('click', () => SB.exporter.download(`${base()}.dxf`, SB.drawing.toDXF(res), 'application/dxf'));
-  $('#btnSvg').addEventListener('click', () => sheets.forEach((sh, i) => setTimeout(() => SB.exporter.download(`${base()}_to${i + 1}.svg`, SB.drawing.sheetToSVG(sh), 'image/svg+xml'), i * 400)));
+  $('#btnDxf').addEventListener('click', () => { flush(); SB.exporter.download(`${base()}.dxf`, SB.drawing.toDXF(res), 'application/dxf'); });
+  $('#btnSvg').addEventListener('click', () => { flush(); sheets.forEach((sh, i) => setTimeout(() => SB.exporter.download(`${base()}_to${i + 1}.svg`, SB.drawing.sheetToSVG(sh), 'image/svg+xml'), i * 400)); });
   $('#btnPng').addEventListener('click', async () => {
+    flush();
     for (let i = 0; i < sheets.length; i++) {
       const blob = await SB.exporter.svgToPng(SB.drawing.sheetToSVG(sheets[i]), sheets[i].paper.w, sheets[i].paper.h);
       SB.exporter.download(`${base()}_to${i + 1}.png`, blob);
@@ -238,20 +262,39 @@
       SB.exporter.download(`${base()}_to${i + 1}.png`, blob);
     }
   });
-  $('#btnPdf').addEventListener('click', () => SB.exporter.print(sheets));
+  $('#btnPdf').addEventListener('click', () => { flush(); SB.exporter.print(sheets); });
+  const doPdf = async (btn) => {
+    flush();
+    if (!res) return;
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Đang tạo PDF…';
+    try {
+      const blob = await SB.exporter.pdf(res, sheets);
+      SB.exporter.download(`${base()}_ThietKe.pdf`, blob);
+      msg(`Đã tạo ${base()}_ThietKe.pdf (${sheets.length} tờ ${res.p.paper}).`);
+    } catch (e) {
+      console.error(e);
+      msg('Không tạo được file PDF: ' + e.message + ' – dùng nút In để lưu PDF.');
+    } finally { btn.disabled = false; btn.textContent = old; }
+  };
   const doXlsx = async (btn) => {
+    flush();
+    if (!res) return;
     const old = btn.textContent;
     btn.disabled = true; btn.textContent = 'Đang tạo Excel…';
     try {
       const blob = await SB.exporter.xlsx(res);
       SB.exporter.download(`${base()}_BOQ.xlsx`, blob);
-      $('#xlsxNote').textContent = '';
+      msg(`Đã tạo ${base()}_BOQ.xlsx (cắt thép, pha cắt, tôn, vật tư mua, kiểm tra).`);
     } catch (e) {
       console.error(e);
-      $('#xlsxNote').textContent = 'Không tải được thư viện Excel (cần mạng) – đã xuất CSV thay thế.';
+      msg('Không tạo được Excel – đã xuất CSV thay thế.');
       SB.exporter.download(`${base()}_BOQ.csv`, SB.exporter.csv(res), 'text/csv;charset=utf-8');
     } finally { btn.disabled = false; btn.textContent = old; }
   };
+  $('#btnPdfMain').addEventListener('click', (e) => doPdf(e.currentTarget));
+  $('#btnPdfFile').addEventListener('click', (e) => doPdf(e.currentTarget));
+  $('#btnXlsxMain').addEventListener('click', (e) => doXlsx(e.currentTarget));
   $('#btnXlsx').addEventListener('click', (e) => doXlsx(e.currentTarget));
   $('#btnXlsx2').addEventListener('click', (e) => doXlsx(e.currentTarget));
   $('#btnCsv').addEventListener('click', () => SB.exporter.download(`${base()}_BOQ.csv`, SB.exporter.csv(res), 'text/csv;charset=utf-8'));
@@ -290,6 +333,7 @@
     run();
   });
 
+  fillSteel();
   load();
   run();
 })();

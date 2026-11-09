@@ -53,14 +53,15 @@
     const Is = (b * h ** 3 - (b - 2 * t) * (h - 2 * t) ** 3) / 12; // trục mạnh (gió)
     const Iw = (h * b ** 3 - (h - 2 * t) * (b - 2 * t) ** 3) / 12; // trục yếu
     const sq = b === h;
-    const id = `${b}x${h}x${t}`;
+    const tStr = Number.isInteger(t) ? t.toFixed(1) : String(t);
+    const id = `${b}x${h}x${tStr}`;
     return Object.assign({
       id, b, h, t, A, I: Is, Iw,
       W: Is / (h / 2),
       r: Math.sqrt(Math.min(Is, Iw) / A),
       kgm: A * STEEL.rho * 1e-6,
       shape: sq ? 'SHS' : 'RHS',
-      name: `Hộp ${b}×${h}×${t}`,
+      name: `Hộp ${b}×${h}×${tStr}`,
       composite: false,
     }, extra || {});
   }
@@ -73,7 +74,7 @@
       id: `2x${base.id}`,
       A, I, W: I / base.h, h: 2 * base.h,
       kgm: 2 * base.kgm,
-      name: `${base.name} + ốp lưng ${base.b}×${base.h}×${base.t}`,
+      name: `${base.name} + ốp lưng ${base.name.replace('Hộp ', '')}`,
       composite: true,
       baseId: base.id,
     });
@@ -87,10 +88,22 @@
     [20, 40, 1.2], [20, 40, 1.4], [25, 50, 1.2], [25, 50, 1.4], [30, 60, 1.4], [30, 60, 1.8],
     [40, 80, 1.4], [40, 80, 1.8], [50, 100, 1.8], [50, 100, 2.0],
   ];
-  const list = RAW.map(([b, h, t]) => makeSection(b, h, t));
+  // quy cách mỏng 1.0 mm: chỉ dùng khi người dùng tự chọn (không đưa vào tối ưu tự động)
+  const RAW_MANUAL = [[20, 20, 1.0], [25, 25, 1.0], [30, 30, 1.0], [40, 40, 1.0], [20, 40, 1.0], [25, 50, 1.0]];
+  const list = RAW.map(([b, h, t]) => makeSection(b, h, t, { auto: true }))
+    .concat(RAW_MANUAL.map(([b, h, t]) => makeSection(b, h, t, { auto: false })));
   const byId = Object.fromEntries(list.map((s) => [s.id, s]));
+  const autoList = list.filter((s) => s.auto);
   SB.catalog = {
-    list, byId,
+    list: autoList, all: list, byId,
+    /** Danh sách cho ô chọn quy cách (nhóm vuông / chữ nhật, sắp theo kích thước) */
+    options() {
+      const sort = (a, b) => a.b - b.b || a.h - b.h || a.t - b.t;
+      return {
+        square: list.filter((s) => s.shape === 'SHS').sort(sort),
+        rect: list.filter((s) => s.shape === 'RHS').sort(sort),
+      };
+    },
     get(id) {
       if (byId[id]) return byId[id];
       if (id && id.startsWith('2x')) return makeBackedSection(byId[id.slice(2)]);
@@ -98,7 +111,7 @@
     },
     backed: makeBackedSection,
     BASE: '20x20x1.2',
-    square() { return list.filter((s) => s.shape === 'SHS'); },
+    square() { return autoList.filter((s) => s.shape === 'SHS'); },
   };
 
   /* ------------------------------------------------------------------ */

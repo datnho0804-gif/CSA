@@ -97,6 +97,23 @@ label.chk { display: flex; gap: 8px; align-items: center; font-size: 13px; }
 .hint { margin: 0; font-size: 12px; color: var(--muted); }
 .fixed { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--chip); font-size: 12.5px; font-weight: 600; color: var(--brand); }
 
+/* Khối nhập chính */
+.quick { padding: 14px; display: grid; gap: 10px; border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 7%, var(--surface)), var(--surface)); border-radius: var(--radius) var(--radius) 0 0; }
+.quick h2 { font-size: 15px; color: var(--brand); }
+.quick label.f input, .quick label.f select { font-size: 16px; padding: 9px 10px; font-weight: 700; }
+.quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+button.big { justify-content: center; text-align: center; white-space: normal; padding: 11px 10px; font-size: 14px; line-height: 1.25; }
+button.green { background: #17803D; border-color: #17803D; color: #fff; }
+button.green:hover { background: #126B33; }
+button:disabled { opacity: .65; cursor: progress; }
+.hint.status:empty { display: none; }
+.hint.status { color: var(--text); font-weight: 600; }
+details.adv > summary { color: var(--muted); font-weight: 700; }
+details.adv[open] > summary { border-bottom: 1px solid var(--border); }
+.adv-body > details > summary { padding-left: 22px; font-weight: 600; }
+.adv-body > details > .fields { padding-left: 22px; }
+
 /* Thẻ tóm tắt */
 .regime {
   padding: 10px 14px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border);

@@ -6,6 +6,9 @@
   const SB = (root.SB = root.SB || {});
   const U = SB.util;
   const EXCELJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+  const JSPDF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  const VENDOR = 'assets/vendor/';
+  const loading = {};
 
   function download(name, data, type) {
     const blob = data instanceof Blob ? data : new Blob([data], { type: type || 'application/octet-stream' });
@@ -18,12 +21,22 @@
   }
 
   function loadScript(src) {
-    return new Promise((resolve, reject) => {
+    if (loading[src]) return loading[src];
+    loading[src] = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = src; s.async = true; s.crossOrigin = 'anonymous';
-      s.onload = () => resolve(); s.onerror = () => reject(new Error('Không tải được thư viện: ' + src));
+      s.src = src; s.async = true;
+      if (/^https?:/.test(src)) s.crossOrigin = 'anonymous';
+      s.onload = () => resolve();
+      s.onerror = () => { delete loading[src]; reject(new Error('Không tải được thư viện: ' + src)); };
       document.head.appendChild(s);
     });
+    return loading[src];
+  }
+  /** Thư viện đi kèm app (docs/assets/vendor) – dự phòng tải từ CDN */
+  async function ensureLib(globalName, localFile, cdnUrl) {
+    if (root[globalName]) return root[globalName];
+    try { await loadScript(VENDOR + localFile); } catch (e) { if (!cdnUrl) throw e; await loadScript(cdnUrl); }
+    return root[globalName];
   }
 
   function fileBase(res) {
@@ -81,8 +94,7 @@
   /* Excel (.xlsx)                                                        */
   /* ------------------------------------------------------------------ */
   async function xlsx(res) {
-    if (!root.ExcelJS) await loadScript(EXCELJS_URL);
-    const ExcelJS = root.ExcelJS;
+    const ExcelJS = await ensureLib('ExcelJS', 'exceljs.min.js', EXCELJS_URL);
     const p = res.p;
     const BLUE = 'FF005BAC', RED = 'FFE60012', CHIP = 'FFE8F1FB';
     const F = (o) => Object.assign({ name: 'Times New Roman', size: 12 }, o || {});
@@ -227,9 +239,8 @@
       let r = 5;
       res.purchase.forEach((it, i) => {
         let price = null;
-        const m = it.name.match(/Thép hộp mạ kẽm (\d+)×(\d+)×([\d.]+)/);
-        if (m && p.cost.steel > 0) {
-          const sec = SB.catalog.get(`${m[1]}x${m[2]}x${m[3]}`);
+        if (it.secId && p.cost.steel > 0) {
+          const sec = SB.catalog.get(it.secId);
           price = Math.round(6 * sec.kgm * p.cost.steel / 100) * 100;
         }
         ws.getRow(r).values = [i + 1, it.group, it.name, it.spec, it.unit, it.qtyNet, it.qtyBuy, price, null, it.note];
@@ -316,6 +327,89 @@
     setTimeout(() => root.print(), 60);
   }
 
-  SB.exporter = { download, xlsx, csv, svgToPng, print, fileBase, EXCELJS_URL };
+  /* ------------------------------------------------------------------ */
+  /* PDF vector (jsPDF + font Tinos nhúng – chữ tiếng Việt chọn/tìm được)   */
+  /* ------------------------------------------------------------------ */
+  function drawSheetPdf(doc, sh) {
+    const H = sh.paper.h;
+    const LAY = SB.drawing.LAYERS;
+    const DASH = { dash: [3, 1.5], center: [6, 1.5, 1, 1.5], dot: [0.6, 1] };
+    let dashKey = null;
+    const setDash = (d) => {
+      const k = d || '';
+      if (k === dashKey) return;
+      dashKey = k;
+      doc.setLineDashPattern(d ? DASH[d] : [], 0);
+    };
+    for (const pl of sh.placements) {
+      const X = (x) => x / pl.s + pl.dx;
+      const Y = (y) => H - (y / pl.s + pl.dy);
+      for (const it of pl.ctx.items) {
+        const col = it.color || (LAY[it.layer] || LAY.TEXT).color;
+        if (it.t === 'line') {
+          doc.setDrawColor(col); doc.setLineWidth(it.lw); setDash(it.dash);
+          doc.line(X(it.x1), Y(it.y1), X(it.x2), Y(it.y2));
+        } else if (it.t === 'poly') {
+          const fill = it.fill && it.closed, stroke = it.lw > 0;
+          if (!fill && !stroke) continue;
+          const pts = it.pts.map(([x, y]) => [X(x), Y(y)]);
+          if (fill) doc.setFillColor(it.fill);
+          if (stroke) { doc.setDrawColor(col); doc.setLineWidth(it.lw); setDash(it.dash); }
+          const deltas = pts.slice(1).map((q, i) => [q[0] - pts[i][0], q[1] - pts[i][1]]);
+          doc.lines(deltas, pts[0][0], pts[0][1], [1, 1], fill && stroke ? 'FD' : fill ? 'F' : 'S', !!it.closed);
+        } else if (it.t === 'circle') {
+          setDash(null);
+          doc.setDrawColor(col); doc.setLineWidth(it.lw);
+          if (it.fill) doc.setFillColor(it.fill);
+          doc.circle(X(it.x), Y(it.y), it.r / pl.s, it.fill ? 'FD' : 'S');
+        } else if (it.t === 'text') {
+          const fs = it.h / pl.s; // cỡ chữ (mm)
+          doc.setFont('Tinos', it.bold ? 'bold' : 'normal');
+          doc.setFontSize(fs * 72 / 25.4);
+          doc.setTextColor(col);
+          const w = doc.getTextWidth(it.s);
+          const a = (it.rot || 0) * Math.PI / 180;
+          const dir = [Math.cos(a), -Math.sin(a)], down = [Math.sin(a), Math.cos(a)];
+          const ax = it.anchor === 'middle' ? 0.5 : it.anchor === 'end' ? 1 : 0;
+          const by = it.base === 'middle' ? 0.34 * fs : it.base === 'top' ? 0.72 * fs : 0;
+          const x0 = X(it.x) - ax * w * dir[0] + by * down[0];
+          const y0 = Y(it.y) - ax * w * dir[1] + by * down[1];
+          doc.text(it.s, x0, y0, { angle: it.rot || 0, baseline: 'alphabetic' });
+        }
+      }
+    }
+  }
+
+  /** Dựng tài liệu PDF (dùng được cả trong Node để kiểm thử) */
+  function buildPdf(JsPDF, res, sheets, fonts) {
+    const p0 = sheets[0].paper;
+    const doc = new JsPDF({ orientation: p0.w >= p0.h ? 'landscape' : 'portrait', unit: 'mm', format: [p0.w, p0.h], compress: true });
+    doc.addFileToVFS('Tinos-Regular.ttf', fonts.regular);
+    doc.addFont('Tinos-Regular.ttf', 'Tinos', 'normal');
+    doc.addFileToVFS('Tinos-Bold.ttf', fonts.bold);
+    doc.addFont('Tinos-Bold.ttf', 'Tinos', 'bold');
+    const p = res.p;
+    doc.setProperties({
+      title: `Thiết kế khung bảng hiệu ${p.L} × ${p.H} mm – ${p.project.name}`,
+      subject: 'Bản vẽ khung sắt hộp, tôn phẳng 3 dem, bảng kê thanh cắt, sơ đồ pha cắt, vật tư cần mua',
+      author: p.project.author || '',
+      keywords: `bảng hiệu, khung sắt hộp, ${res.sections.map((s) => s.name).join(', ')}`,
+      creator: 'Web app Thiết kế khung bảng hiệu',
+    });
+    sheets.forEach((sh, n) => {
+      if (n > 0) doc.addPage([sh.paper.w, sh.paper.h], sh.paper.w >= sh.paper.h ? 'landscape' : 'portrait');
+      drawSheetPdf(doc, sh);
+    });
+    return doc;
+  }
+
+  async function pdf(res, sheets) {
+    await ensureLib('jspdf', 'jspdf.umd.min.js', JSPDF_URL);
+    if (!SB.fontsTinos) await loadScript(VENDOR + 'fonts-tinos.js');
+    const doc = buildPdf(root.jspdf.jsPDF, res, sheets, SB.fontsTinos);
+    return doc.output('blob');
+  }
+
+  SB.exporter = { download, xlsx, csv, svgToPng, print, pdf, buildPdf, fileBase, EXCELJS_URL };
   if (typeof module !== 'undefined' && module.exports) module.exports = SB;
 })(typeof window !== 'undefined' ? window : globalThis);
