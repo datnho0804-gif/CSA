@@ -35,10 +35,11 @@ L_SIGN = 6000.0          # chiều dài bảng (mm)
 H_SIGN = 2000.0          # chiều cao bảng (mm)
 B = 20.0                 # cạnh hộp vuông (mm)
 T = 1.2                  # chiều dày thành hộp (mm)
-RAIL_Y = (500.0, 1000.0, 1500.0)   # tim các thanh ngang trung gian (mm, tính từ đáy)
-VERT_PITCH = 600.0       # bước thanh đứng (mm) -> ô lưới 600 x 500
-STRUT_NODE_Y = 1500.0    # cao độ nút liên kết thanh chống xiên trên thanh đứng
-BRACE_NODE_Y = 1000.0    # cao độ nút liên kết giằng K trên thanh đứng
+RAIL_Y = (1000.0,)       # tim thanh ngang giữa (mm, tính từ đáy) -> 2 hàng ô
+VERT_PITCH = 1000.0      # bước thanh đứng (mm) -> ô lưới 1000 x 1000 = 12 ô
+STRUT_NODE_Y = 1500.0    # cao độ liên kết thanh chống xiên C1 trên thanh đứng (giữa ô trên)
+BRACE_NODE_Y = 1000.0    # cao độ nút giằng K (C2) – trùng thanh ngang giữa
+STIFFEN_MID = True       # ốp lưng C5 (hộp 20x20 hàn sau thanh đứng giữa -> tiết diện 20x40)
 FOOT_D = 1500.0          # khoảng cách chân chống ra phía sau (tính từ tim thanh đứng)
 STOCK = 6000.0           # chiều dài cây thép thương phẩm
 KERF = 3.0               # hao hụt mạch cắt mỗi nhát (mm)
@@ -83,8 +84,8 @@ class Item:
 
 @dataclass
 class Geometry:
-    vert_x: list[float] = field(default_factory=list)       # tim các thanh đứng
-    seg_y: list[tuple[float, float]] = field(default_factory=list)  # đoạn thanh đứng trung gian
+    vert_x: list[float] = field(default_factory=list)       # tim các thanh đứng (chạy suốt)
+    seg_x: list[tuple[float, float]] = field(default_factory=list)  # đoạn thanh ngang giữa (mỗi hàng)
     strut_p1: tuple[float, float] = (0.0, 0.0)              # (u, y) mặt cắt
     strut_p2: tuple[float, float] = (0.0, 0.0)
     strut_mid: tuple[float, float] = (0.0, 0.0)
@@ -97,14 +98,14 @@ def build_geometry() -> Geometry:
     g = Geometry()
     n_bay = int(round(L_SIGN / VERT_PITCH))
     g.vert_x = [B / 2] + [VERT_PITCH * k for k in range(1, n_bay)] + [L_SIGN - B / 2]
-    edges = [B] + [v for y in RAIL_Y for v in (y - B / 2, y + B / 2)] + [H_SIGN - B]
-    g.seg_y = [(edges[i], edges[i + 1]) for i in range(0, len(edges), 2)]
-    # mặt cắt: u = 0 là tim thanh đứng, u > 0 hướng ra sau bảng
+    g.seg_x = [(a + B / 2, b - B / 2) for a, b in zip(g.vert_x[:-1], g.vert_x[1:])]
+    # mặt cắt tại thanh đứng giữa: u = 0 là tim thanh đứng, u > 0 hướng ra sau bảng
+    u0 = B if STIFFEN_MID else 0.0                    # C1, C2 hàn vào tim ốp lưng C5
     g.foot_center = (FOOT_D, B / 2)
-    g.strut_p1 = (0.0, STRUT_NODE_Y)
+    g.strut_p1 = (u0, STRUT_NODE_Y)
     g.strut_p2 = (FOOT_D, B)                          # tựa lên mặt trên chân dọc C4
     g.strut_mid = ((g.strut_p1[0] + g.strut_p2[0]) / 2, (g.strut_p1[1] + g.strut_p2[1]) / 2)
-    g.brace_p1 = (0.0, BRACE_NODE_Y)
+    g.brace_p1 = (u0, BRACE_NODE_Y)
     dx, dy = g.strut_p2[0] - g.strut_p1[0], g.strut_p2[1] - g.strut_p1[1]
     ln = math.hypot(dx, dy)
     nx, ny = -dy / ln, dx / ln                        # pháp tuyến hướng lên-trên
@@ -119,25 +120,31 @@ def build_items(g: Geometry) -> list[Item]:
     n_strut = len(g.vert_x)                           # chống tại MỌI thanh đứng
     items: list[Item] = [
         Item("K1", "Thanh ngang bao trên + dưới (dùng nguyên cây)", ceil10(L_SIGN), 2, "A"),
-        Item("K2", "Thanh đứng bao 2 đầu", ceil10(H_SIGN - 2 * B), 2, "A"),
-        Item("K3", "Thanh ngang trung gian chạy suốt (y=500/1000/1500)",
-             ceil10(L_SIGN - 2 * B), len(RAIL_Y), "A"),
+        Item("K2", f"Thanh đứng chạy suốt (2 đầu + {n_vert_mid} giữa)", ceil10(H_SIGN - 2 * B),
+             len(g.vert_x), "A"),
     ]
     seg_count: "OrderedDict[int, int]" = OrderedDict()
-    for y0, y1 in g.seg_y:
-        seg_count[ceil10(y1 - y0)] = seg_count.get(ceil10(y1 - y0), 0) + n_vert_mid
-    marks = iter(("K4", "K5", "K6", "K7"))
+    for x0, x1 in g.seg_x:
+        seg_count[ceil10(x1 - x0)] = seg_count.get(ceil10(x1 - x0), 0) + len(RAIL_Y)
+    marks = iter(("K3", "K4", "K5", "K6"))
+    rails = "/".join(f"{y:.0f}" for y in RAIL_Y)
     for ln, q in sorted(seg_count.items()):
-        items.append(Item(next(marks), "Đoạn thanh đứng trung gian (hàn giữa 2 thanh ngang)", ln, q, "A"))
+        items.append(Item(next(marks), f"Đoạn thanh ngang giữa y={rails} (hàn giữa 2 thanh đứng)", ln, q, "A"))
 
-    strut_len = math.dist(g.strut_p1, g.strut_p2)
-    brace_len = math.dist(g.brace_p1, g.strut_mid)
+    # chiều dài C1, C2 lấy giá trị lớn hơn giữa thanh đứng có/không ốp lưng (thanh đứng 2 đầu không ốp)
+    strut_len = max(math.dist((u, STRUT_NODE_Y), g.strut_p2) for u in (0.0, g.strut_p1[0]))
+    brace_len = max(math.dist((u, BRACE_NODE_Y), ((u + g.strut_p2[0]) / 2, (STRUT_NODE_Y + g.strut_p2[1]) / 2))
+                    for u in (0.0, g.strut_p1[0]))
     items += [
-        Item("C1", "Thanh chống xiên (nút y=1500 -> chân dọc)", ceil10(strut_len), n_strut, "B"),
-        Item("C2", "Giằng K (nút y=1000 -> giữa thanh chống)", ceil10(brace_len), n_strut, "B"),
+        Item("C1", f"Thanh chống xiên (thanh đứng y={STRUT_NODE_Y:.0f} -> chân dọc)", ceil10(strut_len),
+             n_strut, "B"),
+        Item("C2", f"Giằng K (nút y={BRACE_NODE_Y:.0f} -> giữa thanh chống)", ceil10(brace_len), n_strut, "B"),
         Item("C3", "Giằng dọc nối giữa các thanh chống", ceil10(L_SIGN), 1, "B"),
         Item("C4", "Thanh chân dọc trên mái (trùng tuyến xà gồ)", ceil10(L_SIGN), 1, "B"),
     ]
+    if STIFFEN_MID:
+        items.append(Item("C5", "Ốp lưng tăng cứng thanh đứng giữa (hàn sau K2 -> 20x40)",
+                          ceil10(H_SIGN), n_vert_mid, "B"))
     return items
 
 
@@ -322,13 +329,19 @@ def draw_elevation(msp, g: Geometry, items: list[Item]):
     """MẶT ĐỨNG KHUNG – nhìn từ mặt trước bảng. Gốc (0, 0)."""
     rect(msp, 0, 0, L_SIGN, B, "KHUNG")                         # K1 dưới
     rect(msp, 0, H_SIGN - B, L_SIGN, H_SIGN, "KHUNG")           # K1 trên
-    rect(msp, 0, B, B, H_SIGN - B, "KHUNG")                     # K2 trái
-    rect(msp, L_SIGN - B, B, L_SIGN, H_SIGN - B, "KHUNG")       # K2 phải
-    for y in RAIL_Y:                                            # K3
-        rect(msp, B, y - B / 2, L_SIGN - B, y + B / 2, "KHUNG")
-    for x in g.vert_x[1:-1]:                                    # K4/K5
-        for y0, y1 in g.seg_y:
-            rect(msp, x - B / 2, y0, x + B / 2, y1, "KHUNG")
+    for x in g.vert_x:                                          # K2 chạy suốt
+        rect(msp, x - B / 2, B, x + B / 2, H_SIGN - B, "KHUNG")
+    for y in RAIL_Y:                                            # K3/K4 đoạn ngang giữa
+        for x0, x1 in g.seg_x:
+            rect(msp, x0, y - B / 2, x1, y + B / 2, "KHUNG")
+    # số hiệu ô lưới
+    n = 1
+    ys_cell = [0.0] + list(RAIL_Y) + [H_SIGN]
+    for y0, y1 in zip(ys_cell[1:][::-1], ys_cell[:-1][::-1]):
+        for x0, x1 in zip([0.0] + g.vert_x[1:-1], g.vert_x[1:-1] + [L_SIGN]):
+            text(msp, f"Ô{n}", ((x0 + x1) / 2, (y0 + y1) / 2), 70, "TEXT", TextEntityAlignment.MIDDLE_CENTER,
+                 color=8)
+            n += 1
 
     # kích thước
     xs = [0.0] + g.vert_x[1:-1] + [L_SIGN]
@@ -344,8 +357,10 @@ def draw_elevation(msp, g: Geometry, items: list[Item]):
     for i, x in enumerate(g.vert_x, 1):
         msp.add_circle((x, -800), 70, dxfattribs={"layer": "CHONG"})
         text(msp, str(i), (x, -800), 70, "CHONG", TextEntityAlignment.MIDDLE_CENTER)
-    text(msp, f"Vị trí {len(g.vert_x)} bộ chống C (phía sau, tại mọi thanh đứng)", (0, -1000), 90,
-         "CHONG", TextEntityAlignment.TOP_LEFT)
+    note = f"Vị trí {len(g.vert_x)} bộ chống C (phía sau, tại mọi thanh đứng)"
+    if STIFFEN_MID:
+        note += f"; thanh đứng 2÷{len(g.vert_x) - 1} có ốp lưng C5"
+    text(msp, note, (0, -1000), 90, "CHONG", TextEntityAlignment.TOP_LEFT)
 
     # vết cắt A-A tại thanh đứng x = 3000
     xa = min(g.vert_x, key=lambda v: abs(v - L_SIGN / 2))
@@ -355,20 +370,25 @@ def draw_elevation(msp, g: Geometry, items: list[Item]):
         text(msp, "A", (xa + 180, y1), 120, align=TextEntityAlignment.MIDDLE_LEFT)
 
     # ghi chú cấu kiện
-    leader(msp, (L_SIGN * 0.20, H_SIGN - B / 2), (L_SIGN * 0.20 + 300, H_SIGN + 250), "K1")
-    leader(msp, (L_SIGN * 0.30, B / 2), (L_SIGN * 0.30 + 250, 200), "K1")
-    leader(msp, (B / 2, H_SIGN * 0.8), (250, H_SIGN + 250), "K2")
-    leader(msp, (L_SIGN * 0.45, RAIL_Y[1]), (L_SIGN * 0.45 + 250, RAIL_Y[1] + 230), "K3")
-    leader(msp, (g.vert_x[2], (g.seg_y[0][0] + g.seg_y[0][1]) / 2), (g.vert_x[2] + 250, 300), "K4")
-    leader(msp, (g.vert_x[3], (g.seg_y[1][0] + g.seg_y[1][1]) / 2), (g.vert_x[3] + 250, 830), "K5")
+    seg_marks = {ln: it.mark for it in items if it.group == "A" and it.mark not in ("K1", "K2")
+                 for ln in [it.length]}
+    leader(msp, (L_SIGN * 0.20, H_SIGN - B / 2), (L_SIGN * 0.20 + 250, H_SIGN + 250), "K1")
+    leader(msp, (L_SIGN * 0.30, B / 2), (L_SIGN * 0.30 + 200, 250), "K1")
+    leader(msp, (g.vert_x[2], H_SIGN * 0.75), (g.vert_x[2] + 200, H_SIGN * 0.75 + 150), "K2")
+    for idx in (0, 2):
+        x0, x1 = g.seg_x[idx]
+        mk = seg_marks.get(ceil10(x1 - x0), "")
+        leader(msp, ((x0 + x1) / 2 + 150, RAIL_Y[0]), ((x0 + x1) / 2 + 300, RAIL_Y[0] - 230), mk)
 
+    n_cell = (len(RAIL_Y) + 1) * (len(g.vert_x) - 1)
     text(msp, "MẶT ĐỨNG KHUNG BẢNG HIỆU (nhìn từ mặt trước)", (L_SIGN / 2, H_SIGN + 700), 180,
          align=TextEntityAlignment.BOTTOM_CENTER)
-    text(msp, f"Ô lưới {VERT_PITCH:.0f} x {RAIL_Y[0]:.0f} – {SPEC} – thanh ngang chạy suốt, thanh đứng cắt đoạn",
+    text(msp, f"Ô lưới {VERT_PITCH:.0f} x {H_SIGN / (len(RAIL_Y) + 1):.0f} ({n_cell} ô) – {SPEC} – "
+              "thanh đứng chạy suốt, thanh ngang giữa cắt đoạn",
          (L_SIGN / 2, H_SIGN + 520), 100, align=TextEntityAlignment.BOTTOM_CENTER)
 
 
-def draw_section(msp, g: Geometry, ox: float, oy: float):
+def draw_section(msp, g: Geometry, items: list[Item], ox: float, oy: float):
     """MẶT CẮT A-A – bộ chống điển hình. u>0 hướng ra phía sau bảng."""
     P = lambda u, y: (ox + u, oy + y)  # noqa: E731
 
@@ -391,6 +411,10 @@ def draw_section(msp, g: Geometry, ox: float, oy: float):
     msp.add_line(P(0, -100), P(0, H_SIGN + 100), dxfattribs={"layer": "TIM"})
     for y in (B / 2, *RAIL_Y, H_SIGN - B / 2):
         square_cut(msp, *P(0, y), "KHUNG")
+    back = B / 2
+    if STIFFEN_MID:                                   # ốp lưng C5 suốt chiều cao 2000
+        rect(msp, *P(B / 2, 0), *P(3 * B / 2, H_SIGN), "CHONG")
+        back = 3 * B / 2
 
     # hệ chống
     tube(msp, P(*g.strut_p1), P(*g.strut_p2), "CHONG")
@@ -398,8 +422,8 @@ def draw_section(msp, g: Geometry, ox: float, oy: float):
     square_cut(msp, *P(*g.tie_center), "GIANG")
     square_cut(msp, *P(*g.foot_center), "CHONG")
     # bát L chân bảng
-    msp.add_lwpolyline([P(B / 2, 0), P(B / 2 + 40, 0), P(B / 2 + 40, 4), P(B / 2 + 4, 4),
-                        P(B / 2 + 4, 40), P(B / 2, 40)], dxfattribs={"layer": "CHONG", "closed": True})
+    msp.add_lwpolyline([P(back, 0), P(back + 40, 0), P(back + 40, 4), P(back + 4, 4),
+                        P(back + 4, 40), P(back, 40)], dxfattribs={"layer": "CHONG", "closed": True})
 
     # gió (mũi tên đặt lệch các đường gióng kích thước)
     for y in (300, 800, 1300, 1800):
@@ -416,15 +440,17 @@ def draw_section(msp, g: Geometry, ox: float, oy: float):
     hdim(msp, ox, ox + FOOT_D, oy, oy - 1050)
 
     # ghi chú
-    sl = math.dist(g.strut_p1, g.strut_p2)
-    bl = math.dist(g.brace_p1, g.strut_mid)
-    leader(msp, P(g.strut_p1[0] + 300, g.strut_p1[1] - 296), P(900, 1950), f"C1 – chống xiên, L≈{ceil10(sl)}")
-    leader(msp, P(g.brace_p1[0] + 300, g.brace_p1[1] - 96), P(450, 1250), f"C2 – giằng K, L≈{ceil10(bl)}")
-    leader(msp, P(*g.tie_center), P(1150, 1000), "C3 – giằng dọc 6000 (hàn mọi bộ chống)")
+    lens = {it.mark: it.length for it in items}
+    lerp = lambda a, b, t: (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)  # noqa: E731
+    leader(msp, P(-B / 2 - 2, 1850), P(300, 2300), "Mặt Alu / tôn / bạt hiflex")
+    if STIFFEN_MID:
+        leader(msp, P(B, 1800), P(300, 2120), f"C5 – ốp lưng {SPEC[4:]} L={lens['C5']} (hàn đính 2 bên)")
+    leader(msp, P(*lerp(g.strut_p1, g.strut_p2, 0.18)), P(1900, 1800), f"C1 – chống xiên, L≈{lens['C1']}")
+    leader(msp, P(*lerp(g.brace_p1, g.strut_mid, 0.5)), P(1900, 1450), f"C2 – giằng K, L≈{lens['C2']}")
+    leader(msp, P(*g.tie_center), P(1900, 1050), "C3 – giằng dọc 6000 (hàn mọi bộ chống)")
     leader(msp, P(*g.foot_center), P(1900, 350), "C4 – chân dọc 6000")
     leader(msp, P(cx, -65), P(1900, -250), "Xà gồ mái – vít bắn tôn 5.5x75 @≤600 + keo")
-    leader(msp, P(B / 2 + 30, 20), P(-2700, -300), "Bát L40x4 + tắc kê M8 @600")
-    leader(msp, P(-B / 2 - 2, 1850), P(300, 2300), "Mặt Alu 3mm / tôn / bạt")
+    leader(msp, P(back + 30, 20), P(-2700, -300), "Bát L40x4 + tắc kê M8 @600")
     leader(msp, P(-50, -300), P(-2700, -600), "Tường chắn / sê nô")
 
     text(msp, "MẶT CẮT A-A – BỘ CHỐNG ĐIỂN HÌNH", P(FOOT_D / 2, H_SIGN + 700), 180,
@@ -456,7 +482,8 @@ def draw_plan(msp, g: Geometry, ox: float, oy: float):
     vdim(msp, oy - B / 2 - tc, oy - B / 2, ox + L_SIGN, ox + L_SIGN + 300)
     vdim(msp, oy - B / 2 - FOOT_D, oy - B / 2, ox + L_SIGN, ox + L_SIGN + 600)
 
-    leader(msp, (ox + g.vert_x[1], oy - 400), (ox + g.vert_x[1] + 200, oy - 300), "C1 + C2 (11 bộ)")
+    leader(msp, (ox + g.vert_x[1], oy - 400), (ox + g.vert_x[1] + 200, oy - 300),
+           f"C1 + C2 ({len(g.vert_x)} bộ)")
     leader(msp, (ox + 2700, oy - B / 2 - tc), (ox + 2900, oy - B / 2 - tc + 180), "C3")
     leader(msp, (ox + 3900, oy - B / 2 - FOOT_D), (ox + 4100, oy - B / 2 - FOOT_D + 180), "C4")
     text(msp, "MẶT BẰNG BỐ TRÍ HỆ CHỐNG", (ox + L_SIGN / 2, oy + 800), 180,
@@ -507,7 +534,7 @@ def build_dxf(g: Geometry, items: list[Item], bins, path: Path) -> ezdxf.documen
     msp = doc.modelspace()
 
     draw_elevation(msp, g, items)
-    draw_section(msp, g, ox=9000, oy=0)
+    draw_section(msp, g, items, ox=9000, oy=0)
     draw_plan(msp, g, ox=0, oy=-2600)
 
     # Bảng thống kê vật tư
@@ -541,14 +568,15 @@ def build_dxf(g: Geometry, items: list[Item], bins, path: Path) -> ezdxf.documen
     notes = (
         "GHI CHÚ KỸ THUẬT\\P"
         f"1. Thép hộp vuông mạ kẽm {B:.0f}x{B:.0f}x{T} mm, m ≈ {MASS:.3f} kg/m (lý thuyết). Kích thước: mm.\\P"
-        "2. Khung mặt: ô lưới 600 x 500; K1, K3 chạy suốt; K4/K5 cắt đoạn hàn giữa các thanh ngang.\\P"
-        f"3. Hệ chống: {len(g.vert_x)} bộ tại MỌI thanh đứng (@600). Mỗi bộ gồm C1 + C2; C3, C4 nối liên tục 6 m.\\P"
-        f"4. Kiểm tra sơ bộ gió vùng II-A (q_tt ≈ {q:.2f} kN/m²): bước chống 600 đạt ~95% khả năng chịu uốn;\\P"
-        "    bước chống 1200 với hộp 20x20x1.2 vượt ~190% – KHÔNG giảm số bộ chống.\\P"
+        "2. Khung mặt: ô lưới 1000 x 1000 (12 ô); K1, K2 chạy suốt; K3/K4 cắt đoạn hàn giữa các thanh đứng.\\P"
+        f"3. Hệ chống: {len(g.vert_x)} bộ tại MỌI thanh đứng (@1000), mỗi bộ C1 + C2; C3, C4 liên tục 6 m;\\P"
+        f"    {len(g.vert_x) - 2} thanh đứng giữa ốp lưng C5 (hàn đính 2 bên, đường hàn 30 mm @150).\\P"
+        f"4. Kiểm tra sơ bộ gió vùng II-A (q_tt ≈ {q:.2f} kN/m²): có ốp lưng C5 đạt ~76% khả năng chịu uốn;\\P"
+        "    bỏ C5 (thanh đứng đơn 20x20x1.2) vượt ~150% – KHÔNG bỏ C5, KHÔNG giảm số bộ chống.\\P"
         "5. C4 đặt trùng tim xà gồ; bắt vít bắn tôn 5.5x75 (long đen cao su) vào xà gồ @≤600, bơm keo chống dột.\\P"
         "6. Chân bảng: bát L40x4 + tắc kê M8 @600 vào tường chắn/sê nô (hoặc vít vào xà gồ nếu đặt trên tôn).\\P"
         "7. Hàn kín 4 mặt tại nút (que J421 2.6 mm); mài, dặm kẽm lạnh/sơn chống rỉ 2 lớp tại mối hàn.\\P"
-        "8. Mặt Alu: bố trí mối nối đứng trùng thanh đứng (x = 2400, 4800), mối nối ngang trùng y = 1000."
+        "8. Ô 1x1 m: mặt Alu nên dùng ≥ 4 mm (3 mm dễ phồng/võng); mối nối đứng tại x = 2000, 4000, ngang y = 1000."
     )
     mt = msp.add_mtext(notes, dxfattribs={"style": TXT_STYLE, "char_height": 75, "layer": "TEXT",
                                           "width": sum(widths)})
