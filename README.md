@@ -1,6 +1,6 @@
 # Thiết kế khung bảng hiệu – xuất PDF bản vẽ & Excel bóc tách
 
-**Dùng ngay:** https://datnho0804-gif.github.io/CSA/
+**Dùng ngay:** https://datnho0804-gif.github.io/BH_GHN/
 
 Nhập **chiều dài × chiều rộng** bảng hiệu và chọn **quy cách sắt hộp** → bấm **Xuất PDF thiết kế** và **Xuất Excel bóc tách**.
 Miễn phí, chạy ngay trên trình duyệt (máy tính và điện thoại), không cần đăng ký, không gửi dữ liệu đi đâu.
@@ -36,12 +36,12 @@ Kiểm tra kết cấu là **sơ bộ** theo tải gió TCVN 2737 (khung phẳng
 
 ### Dành cho chủ repo: phát hành bằng GitHub Pages (miễn phí)
 
-1. Repo phải ở chế độ **public** (gói GitHub miễn phí): **Settings → General → Danger Zone → Change visibility → Change to public**.
+1. Repo (tên hiện tại: `BH_GHN`) phải ở chế độ **public** (gói GitHub miễn phí): **Settings → General → Danger Zone → Change visibility → Change to public**.
 2. **Settings → Pages → Build and deployment → Source: Deploy from a branch** → Branch **`main`**, thư mục **`/docs`** → **Save**.
-3. Sau 1–2 phút, app chạy tại `https://datnho0804-gif.github.io/CSA/` (đường link hiện ở đầu trang Settings → Pages).
+3. Sau 1–2 phút, app chạy tại `https://datnho0804-gif.github.io/BH_GHN/` (đường link hiện ở đầu trang Settings → Pages).
 4. Mỗi lần cập nhật code vào `main`, GitHub tự đăng lại bản mới. Khi phát hành bản mới, tăng `VERSION` trong `docs/sw.js` để điện thoại đã cài app nhận bản mới.
 
-> Nếu đổi tên repo, đường link app đổi theo – cập nhật lại các thẻ `og:url`, `og:image`, `canonical` trong `docs/index.html`.
+> Nếu đổi tên repo, đường link app đổi theo (GitHub **không** tự chuyển link trang web cũ sang tên mới) – cập nhật lại các thẻ `og:url`, `og:image`, `canonical` và link mã nguồn trong `docs/index.html`, rồi gửi lại link mới cho người dùng.
 
 ### Dùng không cần mạng
 
