@@ -6,6 +6,11 @@
   <title>Thiết kế khung bảng hiệu</title>
   <meta name="description" content="Nhập dài × rộng và quy cách sắt hộp → xuất ngay file PDF bản vẽ khung bảng hiệu (lót tôn phẳng 3 dem) và file Excel bóc tách từng thanh cắt, sơ đồ pha cắt cây 6 m, vật tư cần mua. Miễn phí, chạy trên trình duyệt.">
   <meta name="theme-color" content="#0B2545">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Khung bảng hiệu">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
   <link rel="canonical" href="https://datnho0804-gif.github.io/CSA/">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="vi_VN">
@@ -46,8 +51,8 @@
         <section class="quick" aria-label="Thông số chính">
           <h2>Thông số chính</h2>
           <div class="grid2">
-            <label class="f">Chiều dài (mm)<input type="number" data-k="L" min="0" step="any" value="8000" inputmode="decimal" required></label>
-            <label class="f">Chiều rộng (mm)<input type="number" data-k="H" min="0" step="any" value="2000" inputmode="decimal" required></label>
+            <label class="f">Chiều dài (mm)<input type="text" data-k="L" data-num="1" value="8000" inputmode="decimal" enterkeyhint="done" autocomplete="off" required></label>
+            <label class="f">Chiều rộng (mm)<input type="text" data-k="H" data-num="1" value="2000" inputmode="decimal" enterkeyhint="done" autocomplete="off" required></label>
           </div>
           <label class="f">Quy cách sắt hộp
             <select data-k="steel" id="steelSel"><option value="auto">Tự động – đề xuất theo kích thước</option></select>
@@ -291,7 +296,15 @@
       </div>
     </section>
   </main>
-  <footer class="foot">Phiên bản 1.0 (11/2026) · Công cụ tính sơ bộ – kiểm tra lại số liệu trước khi gia công · Toàn bộ tính toán chạy trong trình duyệt, không gửi dữ liệu đi đâu · <a href="https://github.com/datnho0804-gif/CSA" rel="noopener">Mã nguồn &amp; góp ý trên GitHub</a></footer>
+  <footer class="foot">Phiên bản 1.0.1 (11/2026) · Công cụ tính sơ bộ – kiểm tra lại số liệu trước khi gia công · Toàn bộ tính toán chạy trong trình duyệt, không gửi dữ liệu đi đâu · <a href="https://github.com/datnho0804-gif/CSA" rel="noopener">Mã nguồn &amp; góp ý trên GitHub</a></footer>
+  <div id="fileReady" class="file-ready" role="dialog" aria-live="polite" hidden>
+    <div class="fr-text"><b id="frName"></b><span>File đã sẵn sàng – chọn cách lưu</span></div>
+    <div class="fr-actions">
+      <a class="btn primary" id="frSave" href="#" download>Lưu / mở file</a>
+      <button type="button" class="green" id="frShare" hidden>Chia sẻ (Zalo, Mail, Tệp…)</button>
+      <button type="button" id="frClose" aria-label="Đóng">Đóng</button>
+    </div>
+  </div>
   <div id="print-root" aria-hidden="true"></div>
 
   <script src="assets/js/core.js"></script>

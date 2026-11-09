@@ -2,7 +2,7 @@
  * Trang (index.html): ưu tiên mạng, mất mạng thì dùng bản đã lưu.
  * File tĩnh (js, css, thư viện, icon): dùng bản đã lưu và cập nhật ngầm từ mạng.
  * Thư viện PDF/Excel được lưu khi dùng lần đầu. Đổi VERSION khi phát hành bản mới. */
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.0.1';
 const CACHE = `khung-bang-hieu-${VERSION}`;
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'assets/style.css',

@@ -41,7 +41,8 @@
       if (el.type === 'checkbox') { setPath(o, el.dataset.k, el.checked); continue; }
       const v = String(el.value).trim().replace(',', '.');
       if (v === '') continue;
-      let val = el.type === 'number' ? Number(v) : v;
+      let val = el.type === 'number' || el.dataset.num ? Number(v.replace(/[^\d.]/g, '')) : v;
+      if (el.dataset.num && !(val > 0)) continue;
       // kích thước gõ nhỏ hơn 100 được hiểu là mét (8 → 8000 mm)
       if ((el.dataset.k === 'L' || el.dataset.k === 'H') && val > 0 && val < 100) val = Math.round(val * 1000);
       setPath(o, el.dataset.k, val);
@@ -240,13 +241,13 @@
   $('#zoomFit').addEventListener('click', () => { zoom = 'fit'; applyZoom(); });
 
   const base = () => SB.exporter.fileBase(res);
-  $('#btnDxf').addEventListener('click', () => { flush(); SB.exporter.download(`${base()}.dxf`, SB.drawing.toDXF(res), 'application/dxf'); });
-  $('#btnSvg').addEventListener('click', () => { flush(); sheets.forEach((sh, i) => setTimeout(() => SB.exporter.download(`${base()}_to${i + 1}.svg`, SB.drawing.sheetToSVG(sh), 'image/svg+xml'), i * 400)); });
+  $('#btnDxf').addEventListener('click', () => { flush(); SB.exporter.deliver(`${base()}.dxf`, SB.drawing.toDXF(res), 'application/dxf'); });
+  $('#btnSvg').addEventListener('click', () => { flush(); sheets.forEach((sh, i) => setTimeout(() => SB.exporter.deliver(`${base()}_to${i + 1}.svg`, SB.drawing.sheetToSVG(sh), 'image/svg+xml'), i * 400)); });
   $('#btnPng').addEventListener('click', async () => {
     flush();
     for (let i = 0; i < sheets.length; i++) {
       const blob = await SB.exporter.svgToPng(SB.drawing.sheetToSVG(sheets[i]), sheets[i].paper.w, sheets[i].paper.h);
-      SB.exporter.download(`${base()}_to${i + 1}.png`, blob);
+      SB.exporter.deliver(`${base()}_to${i + 1}.png`, blob);
       await new Promise((r) => setTimeout(r, 400));
     }
   });
@@ -255,11 +256,11 @@
     if (!b) return;
     if (b.dataset.svg !== undefined) {
       const i = Number(b.dataset.svg);
-      SB.exporter.download(`${base()}_to${i + 1}.svg`, SB.drawing.sheetToSVG(sheets[i]), 'image/svg+xml');
+      SB.exporter.deliver(`${base()}_to${i + 1}.svg`, SB.drawing.sheetToSVG(sheets[i]), 'image/svg+xml');
     } else if (b.dataset.png !== undefined) {
       const i = Number(b.dataset.png);
       const blob = await SB.exporter.svgToPng(SB.drawing.sheetToSVG(sheets[i]), sheets[i].paper.w, sheets[i].paper.h);
-      SB.exporter.download(`${base()}_to${i + 1}.png`, blob);
+      SB.exporter.deliver(`${base()}_to${i + 1}.png`, blob);
     }
   });
   $('#btnPdf').addEventListener('click', () => { flush(); SB.exporter.print(sheets); });
@@ -270,8 +271,8 @@
     btn.disabled = true; btn.textContent = 'Đang tạo PDF…';
     try {
       const blob = await SB.exporter.pdf(res, sheets);
-      SB.exporter.download(`${base()}_ThietKe.pdf`, blob);
-      msg(`Đã tạo ${base()}_ThietKe.pdf (${sheets.length} tờ ${res.p.paper}).`);
+      SB.exporter.deliver(`${base()}_ThietKe.pdf`, blob);
+      msg(`Đã tạo ${base()}_ThietKe.pdf (${sheets.length} tờ ${res.p.paper}).${SB.exporter.isAppleTouch() ? ' Chạm “Lưu / mở file” hoặc “Chia sẻ” ở cuối màn hình.' : ''}`);
     } catch (e) {
       console.error(e);
       msg('Không tạo được file PDF: ' + e.message + ' – dùng nút In để lưu PDF.');
@@ -284,12 +285,12 @@
     btn.disabled = true; btn.textContent = 'Đang tạo Excel…';
     try {
       const blob = await SB.exporter.xlsx(res);
-      SB.exporter.download(`${base()}_BOQ.xlsx`, blob);
-      msg(`Đã tạo ${base()}_BOQ.xlsx (cắt thép, pha cắt, tôn, vật tư mua, kiểm tra).`);
+      SB.exporter.deliver(`${base()}_BOQ.xlsx`, blob);
+      msg(`Đã tạo ${base()}_BOQ.xlsx (cắt thép, pha cắt, tôn, vật tư mua, kiểm tra).${SB.exporter.isAppleTouch() ? ' Chạm “Lưu / mở file” hoặc “Chia sẻ” ở cuối màn hình.' : ''}`);
     } catch (e) {
       console.error(e);
       msg('Không tạo được Excel – đã xuất CSV thay thế.');
-      SB.exporter.download(`${base()}_BOQ.csv`, SB.exporter.csv(res), 'text/csv;charset=utf-8');
+      SB.exporter.deliver(`${base()}_BOQ.csv`, SB.exporter.csv(res), 'text/csv;charset=utf-8');
     } finally { btn.disabled = false; btn.textContent = old; }
   };
   $('#btnPdfMain').addEventListener('click', (e) => doPdf(e.currentTarget));
@@ -297,7 +298,7 @@
   $('#btnXlsxMain').addEventListener('click', (e) => doXlsx(e.currentTarget));
   $('#btnXlsx').addEventListener('click', (e) => doXlsx(e.currentTarget));
   $('#btnXlsx2').addEventListener('click', (e) => doXlsx(e.currentTarget));
-  $('#btnCsv').addEventListener('click', () => SB.exporter.download(`${base()}_BOQ.csv`, SB.exporter.csv(res), 'text/csv;charset=utf-8'));
+  $('#btnCsv').addEventListener('click', () => SB.exporter.deliver(`${base()}_BOQ.csv`, SB.exporter.csv(res), 'text/csv;charset=utf-8'));
   $('#btnCopyBuy').addEventListener('click', async (e) => {
     const txt = res.purchase.map((r, i) => `${i + 1}. ${r.name} – ${r.spec}: ${U.fmt(r.qtyBuy, ['m dài', 'm²', 'kg'].includes(r.unit) ? 1 : 0)} ${r.unit}${r.note ? ` (${r.note})` : ''}`).join('\n');
     try { await navigator.clipboard.writeText(txt); e.currentTarget.textContent = 'Đã sao chép ✓'; } catch (err) { e.currentTarget.textContent = 'Trình duyệt chặn sao chép'; }
@@ -307,7 +308,7 @@
 
   $('#btnSave').addEventListener('click', () => {
     const data = readForm();
-    SB.exporter.download(`${res ? base() : 'bang_hieu'}.json`, JSON.stringify({ app: 'bang-hieu-khung', version: 1, input: data }, null, 2), 'application/json');
+    SB.exporter.deliver(`${res ? base() : 'bang_hieu'}.json`, JSON.stringify({ app: 'bang-hieu-khung', version: 1, input: data }, null, 2), 'application/json');
   });
   $('#fileOpen').addEventListener('change', async (ev) => {
     const f = ev.target.files[0];
@@ -332,6 +333,10 @@
     });
     run();
   });
+
+  $('#frClose').addEventListener('click', () => SB.exporter.closeReady());
+  // còn file trong hàng đợi (vd. PNG nhiều tờ) thì chuyển sang file kế tiếp sau khi chạm Lưu
+  $('#frSave').addEventListener('click', () => { if (SB.exporter.pending() > 0) setTimeout(() => SB.exporter.closeReady(), 1500); });
 
   fillSteel();
   load();
