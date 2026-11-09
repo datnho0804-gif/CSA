@@ -328,7 +328,7 @@
       lamps: { enabled: true, count: 5, rise: 500, reach: 700, power: 100 },
       strut: { spacing: 'auto', endBracing: true, drop: 0 },
       face: { orientation: 'auto', fastener: 'rivet', pitch: 'auto', allowance: 50, hiflex: true },
-      project: { name: 'Bảng hiệu GHN', code: 'KT-GHN', author: $('[data-k="project.author"]').value || '' },
+      project: { name: 'Bảng hiệu mẫu', code: 'KT-BH-MAU', author: $('[data-k="project.author"]').value || '' },
     });
     run();
   });
@@ -336,4 +336,9 @@
   fillSteel();
   load();
   run();
+
+  // Cài như ứng dụng + dùng lại khi mất mạng (chỉ khi chạy qua https, ví dụ GitHub Pages)
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { /* bỏ qua */ }); });
+  }
 })();

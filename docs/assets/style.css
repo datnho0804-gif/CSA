@@ -178,6 +178,7 @@ h2.sec { font-size: 15px; color: var(--brand); margin: 6px 0 10px; }
 .help h3 { color: var(--brand); margin: 14px 0 6px; font-size: 15px; }
 .help li { margin: 3px 0; }
 footer.foot { padding: 4px 16px 20px; color: var(--muted); font-size: 12px; text-align: center; }
+footer.foot a { color: var(--brand); font-weight: 600; }
 
 #print-root { display: none; }
 

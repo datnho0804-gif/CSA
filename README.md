@@ -1,17 +1,27 @@
-# CSA – Công cụ thiết kế khung bảng hiệu
+# Thiết kế khung bảng hiệu – xuất PDF bản vẽ & Excel bóc tách
 
-## 1. Web app “Thiết kế khung bảng hiệu” (thư mục `docs/`)
+**Dùng ngay:** https://datnho0804-gif.github.io/CSA/
 
-Web app tĩnh (HTML + JavaScript, không cần máy chủ).
+Nhập **chiều dài × chiều rộng** bảng hiệu và chọn **quy cách sắt hộp** → bấm **Xuất PDF thiết kế** và **Xuất Excel bóc tách**.
+Miễn phí, chạy ngay trên trình duyệt (máy tính và điện thoại), không cần đăng ký, không gửi dữ liệu đi đâu.
 
-**Cách dùng nhanh:** nhập **chiều dài × chiều rộng** bảng hiệu (mm, hoặc gõ số mét như `8` và `2`) và chọn **quy cách sắt hộp** (hoặc để *Tự động*) → bấm **Xuất PDF thiết kế** và **Xuất Excel bóc tách**. Mọi thông số khác đã có giá trị mặc định (dựng trên mái – chống xiên, tôn phẳng 3 dem khổ 1 m, gió vùng II-A…) và chỉnh trong mục *Tùy chọn nâng cao* khi cần.
+![Ảnh xem trước](docs/assets/og-image.png)
 
-App dùng để:
+## Cách dùng
 
-- **Xuất bản vẽ khung bảng hiệu**: mặt đứng khung + lớp tôn, mặt cắt A-A (khung, tôn, hệ chống sau, cần đèn), mặt bằng bố trí hệ chống/pát, sơ đồ trải tôn, khung tên – khổ A3/A2/A1.
-  - Tải **DXF** (AutoCAD, vẽ tỷ lệ 1:1, đơn vị mm), **SVG**, **PNG**, hoặc **In / Lưu PDF**.
-- **Bóc tách khối lượng**: liệt kê **từng thanh cắt** (ký hiệu, quy cách, dài cắt chính xác theo mép thanh, số lượng, vị trí lắp), **sơ đồ pha cắt cây 6 m** (mạch cắt 3 mm, cắt vuông đầu cây 10 mm), tôn phẳng, và **danh sách vật tư cần mua** (số cây thép, m dài tôn, đinh rút/vít, bát, tắc kê, vít mái, keo, que hàn, đá cắt, sơn kẽm lạnh, đèn).
-- Xuất **Excel (.xlsx)** 6 sheet (font Times New Roman, có công thức) hoặc **CSV**.
+1. Mở link trên (Chrome, Edge, Safari, Cốc Cốc…).
+2. Nhập **chiều dài** và **chiều rộng** bảng hiệu theo mm (hoặc gõ số mét: `8` và `2` = 8000 × 2000 mm).
+3. Chọn **quy cách sắt hộp** – để *Tự động* nếu muốn app đề xuất (bảng ≤ 8 m × 2 m dùng hộp mạ kẽm 20×20×1.2).
+4. Bấm **Xuất PDF thiết kế** (bản vẽ khung, mặt cắt, mặt bằng chống, trải tôn, bảng kê từng thanh cắt, sơ đồ pha cắt cây 6 m, vật tư cần mua – khổ A3) và **Xuất Excel bóc tách**.
+5. Cần chỉnh thêm (dựng trên mái hay áp tường, đèn pha, vùng gió, khổ giấy, tên công trình…) thì mở mục **Tùy chọn nâng cao**.
+
+Cài lên điện thoại như một ứng dụng: mở link bằng Chrome → menu ⋮ → **Thêm vào màn hình chính** (iPhone: Safari → Chia sẻ → **Thêm vào MH chính**). Sau lần mở đầu tiên, app vẫn mở lại được khi mất mạng.
+
+## Tính năng
+
+- **Bản vẽ khung bảng hiệu**: mặt đứng khung + lớp tôn, mặt cắt A-A (khung, tôn, hệ chống sau, cần đèn), mặt bằng bố trí hệ chống/pát, sơ đồ trải tôn, khung tên – khổ A3/A2/A1. Xuất **PDF** (vector, chữ tiếng Việt), **DXF** (AutoCAD, tỷ lệ 1:1, mm), **SVG**, **PNG**.
+- **Bóc tách khối lượng**: liệt kê **từng thanh cắt** (ký hiệu, quy cách, dài cắt chính xác theo mép thanh, số lượng, vị trí lắp), **sơ đồ pha cắt cây 6 m** (mạch cắt 3 mm, cắt vuông đầu cây 10 mm), tôn phẳng, **vật tư cần mua** (số cây thép, m dài tôn, đinh rút/vít, bát, tắc kê, vít mái, keo, que hàn, đá cắt, sơn kẽm lạnh, đèn).
+- **Excel (.xlsx)** 6 sheet (font Times New Roman, có công thức) hoặc **CSV**.
 
 ### Quy tắc vật liệu áp dụng
 
@@ -24,14 +34,14 @@ App dùng để:
 
 Kiểm tra kết cấu là **sơ bộ** theo tải gió TCVN 2737 (khung phẳng 2D cho tuyến chống, dầm tải 2 phương cho ô lưới, ổn định thanh nén theo đường cong EC3-c). Không thay thế thiết kế kết cấu chính thức.
 
-### Bật GitHub Pages để dùng online
+### Dành cho chủ repo: phát hành bằng GitHub Pages (miễn phí)
 
-1. Gộp (merge) nhánh chứa web app vào `main`.
-2. Vào **Settings → Pages** của repo.
-3. Mục **Build and deployment → Source** chọn **Deploy from a branch**; **Branch** chọn `main`, thư mục **`/docs`** → **Save**.
-4. Sau 1–2 phút, app chạy tại `https://<tên-tài-khoản>.github.io/<tên-repo>/` (ví dụ `https://datnho0804-gif.github.io/CSA/`).
+1. Repo phải ở chế độ **public** (gói GitHub miễn phí): **Settings → General → Danger Zone → Change visibility → Change to public**.
+2. **Settings → Pages → Build and deployment → Source: Deploy from a branch** → Branch **`main`**, thư mục **`/docs`** → **Save**.
+3. Sau 1–2 phút, app chạy tại `https://datnho0804-gif.github.io/CSA/` (đường link hiện ở đầu trang Settings → Pages).
+4. Mỗi lần cập nhật code vào `main`, GitHub tự đăng lại bản mới. Khi phát hành bản mới, tăng `VERSION` trong `docs/sw.js` để điện thoại đã cài app nhận bản mới.
 
-> Repo **private** chỉ bật được GitHub Pages khi tài khoản dùng gói GitHub Pro/Team/Enterprise. Với gói miễn phí: chuyển repo sang **public** (Settings → General → Danger Zone → Change visibility) hoặc tạo một repo public riêng chỉ chứa thư mục `docs/`.
+> Nếu đổi tên repo, đường link app đổi theo – cập nhật lại các thẻ `og:url`, `og:image`, `canonical` trong `docs/index.html`.
 
 ### Dùng không cần mạng
 

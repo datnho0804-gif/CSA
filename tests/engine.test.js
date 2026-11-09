@@ -165,7 +165,7 @@ test('danh mục: quy cách 1.0 mm chỉ dùng khi tự chọn, mã quy cách ch
 });
 
 test('xuất PDF vector: đúng số tờ, nhúng font Tinos', () => {
-  const r = SB.design.run({ L: 8000, H: 2000, project: { name: 'Bảng hiệu GHN' } });
+  const r = SB.design.run({ L: 8000, H: 2000, project: { name: 'Bảng hiệu mẫu' } });
   const sheets = SB.drawing.composeSheets(r);
   const doc = SB.exporter.buildPdf(jsPDF, r, sheets, SB.fontsTinos);
   assert.equal(doc.getNumberOfPages(), sheets.length);
