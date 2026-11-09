@@ -47,6 +47,16 @@ END_TRIM = 10.0          # cắt vuông đầu cây thương phẩm khi cây đ�
 SPARE_BARS = 1           # cây dự phòng (cắt hỏng, chỉnh chiều dài chống theo hiện trường)
 RHO = 7850.0             # khối lượng riêng thép (kg/m3)
 
+# Mặt bảng: tôn phẳng bắn vít lên khung
+FACE_T = 0.40            # chiều dày tôn phẳng (mm): 0.30 = 3 dem, 0.40 = 4 dem
+COIL_W = 1200.0          # khổ tôn (mm): 1000 hoặc 1200
+LAP = 20.0               # chồng mí tại thanh ngang giữa (mm) – bằng bề rộng hộp
+WRAP = 20.0              # gấp mép bọc cạnh khung chu vi (mm)
+CUT_ALLOW = 50.0         # dư cắt vuông đầu tấm theo chiều dài (mm)
+SCREW = "Vít tự khoan đầu dù 4.2x13"
+SCREW_PITCH = 150.0      # bước vít trên mọi thanh khung mặt (mm)
+SCREW_SPARE = 0.10       # dự phòng vít rơi/hỏng
+
 # Tải gió kiểm tra sơ bộ (TCVN 2737, vùng II-A, địa hình B, z ~ 7 m)
 W0, K_Z, C_AERO, GAMMA_W = 0.83, 0.93, 1.4, 1.2
 
@@ -237,6 +247,64 @@ def cutting_plan(items: list[Item]) -> list[list[tuple[str, int]]]:
     return out
 
 
+@dataclass
+class FacePlan:
+    mode: str                               # "LAP": chồng mí + gấp mép | "BUTT": nối đối đầu + nẹp
+    widths: list[float]                     # bề rộng cắt từng tấm (mm, theo phương đứng)
+    sheet_len: float                        # chiều dài cắt mỗi tấm (mm)
+    order_len_m: float                      # chiều dài mua mỗi tấm (m dài)
+    screws: int                             # số vít tính toán
+    screws_buy: int                         # số vít đề xuất mua
+    strip_m: float                          # nẹp phủ mối nối + nẹp viền (m) – chỉ phương án BUTT
+
+    @property
+    def n(self) -> int:
+        return len(self.widths)
+
+    @property
+    def order_m(self) -> float:
+        return self.n * self.order_len_m
+
+    @property
+    def order_m2(self) -> float:
+        return self.order_m * COIL_W / 1000
+
+    @property
+    def net_m2(self) -> float:
+        return sum(self.widths) / 1000 * self.sheet_len / 1000
+
+    @property
+    def kg(self) -> float:
+        return self.order_m2 * FACE_T * RHO / 1000
+
+    def describe(self) -> str:
+        if self.mode == "LAP":
+            return f"chồng mí {LAP:.0f} tại thanh ngang giữa, gấp mép {WRAP:.0f} chu vi"
+        return "nối đối đầu trên thanh ngang giữa + nẹp phủ, nẹp viền chu vi"
+
+
+def build_face(g: Geometry) -> FacePlan:
+    """Tôn phẳng chạy ngang theo chiều dài 6 m, mỗi hàng ô một tấm, mối nối nằm trên thanh ngang giữa."""
+    ys = [0.0, *RAIL_Y, H_SIGN]
+    rows = len(ys) - 1
+    lap = [ys[i + 1] - ys[i] + (WRAP if i == 0 else LAP / 2) + (WRAP if i == rows - 1 else LAP / 2)
+           for i in range(rows)]
+    if max(lap) <= COIL_W:
+        mode, widths, sheet_len, strip = "LAP", lap, L_SIGN + 2 * WRAP, 0.0
+    else:
+        widths = [ys[i + 1] - ys[i] for i in range(rows)]
+        if max(widths) > COIL_W:
+            raise ValueError(f"Khổ tôn {COIL_W:.0f} nhỏ hơn chiều cao hàng ô {max(widths):.0f}")
+        mode, sheet_len = "BUTT", L_SIGN
+        strip = ((rows - 1) * L_SIGN + 2 * (L_SIGN + H_SIGN)) / 1000
+    order_len = math.ceil((sheet_len + CUT_ALLOW) / 100) / 10
+    n_h = len(ys) * (math.ceil(L_SIGN / SCREW_PITCH) + 1)
+    n_v = len(g.vert_x) * sum(math.ceil((ys[i + 1] - ys[i]) / SCREW_PITCH) - 1 for i in range(rows))
+    screws = n_h + n_v
+    return FacePlan(mode, widths, sheet_len, order_len, screws,
+                    int(math.ceil(screws * (1 + SCREW_SPARE) / 10) * 10), strip)
+
+
 def bar_waste(bar: list[tuple[str, int]]) -> float:
     """Phần dư còn dùng được của cây (đã trừ mạch cắt và cắt vuông đầu cây)."""
     if len(bar) == 1:
@@ -325,7 +393,7 @@ def leader(msp, tip, label_pos, s: str, h: float = 90):
     text(msp, s, (label_pos[0] + 20, label_pos[1]), h, align=TextEntityAlignment.MIDDLE_LEFT)
 
 
-def draw_elevation(msp, g: Geometry, items: list[Item]):
+def draw_elevation(msp, g: Geometry, items: list[Item], face: FacePlan):
     """MẶT ĐỨNG KHUNG – nhìn từ mặt trước bảng. Gốc (0, 0)."""
     rect(msp, 0, 0, L_SIGN, B, "KHUNG")                         # K1 dưới
     rect(msp, 0, H_SIGN - B, L_SIGN, H_SIGN, "KHUNG")           # K1 trên
@@ -380,6 +448,9 @@ def draw_elevation(msp, g: Geometry, items: list[Item]):
         mk = seg_marks.get(ceil10(x1 - x0), "")
         leader(msp, ((x0 + x1) / 2 + 150, RAIL_Y[0]), ((x0 + x1) / 2 + 300, RAIL_Y[0] - 230), mk)
 
+    joint = f"Mối nối tôn chồng mí {LAP:.0f}" if face.mode == "LAP" else "Mối nối tôn đối đầu + nẹp"
+    leader(msp, (L_SIGN * 0.78, RAIL_Y[0]), (L_SIGN * 0.78 + 150, RAIL_Y[0] + 280), joint, h=80)
+
     n_cell = (len(RAIL_Y) + 1) * (len(g.vert_x) - 1)
     text(msp, "MẶT ĐỨNG KHUNG BẢNG HIỆU (nhìn từ mặt trước)", (L_SIGN / 2, H_SIGN + 700), 180,
          align=TextEntityAlignment.BOTTOM_CENTER)
@@ -388,7 +459,7 @@ def draw_elevation(msp, g: Geometry, items: list[Item]):
          (L_SIGN / 2, H_SIGN + 520), 100, align=TextEntityAlignment.BOTTOM_CENTER)
 
 
-def draw_section(msp, g: Geometry, items: list[Item], ox: float, oy: float):
+def draw_section(msp, g: Geometry, items: list[Item], face: FacePlan, ox: float, oy: float):
     """MẶT CẮT A-A – bộ chống điển hình. u>0 hướng ra phía sau bảng."""
     P = lambda u, y: (ox + u, oy + y)  # noqa: E731
 
@@ -442,7 +513,8 @@ def draw_section(msp, g: Geometry, items: list[Item], ox: float, oy: float):
     # ghi chú
     lens = {it.mark: it.length for it in items}
     lerp = lambda a, b, t: (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)  # noqa: E731
-    leader(msp, P(-B / 2 - 2, 1850), P(300, 2300), "Mặt Alu / tôn / bạt hiflex")
+    face_lbl = f"Tôn phẳng {FACE_T:.2f} mm khổ {COIL_W:.0f}"
+    leader(msp, P(-B / 2 - 2, 1850), P(300, 2300), face_lbl + (f", gấp mép {WRAP:.0f}" if face.mode == "LAP" else ""))
     if STIFFEN_MID:
         leader(msp, P(B, 1800), P(300, 2120), f"C5 – ốp lưng {SPEC[4:]} L={lens['C5']} (hàn đính 2 bên)")
     leader(msp, P(*lerp(g.strut_p1, g.strut_p2, 0.18)), P(1900, 1800), f"C1 – chống xiên, L≈{lens['C1']}")
@@ -529,12 +601,12 @@ def draw_title_block(msp, x0, y0, w, h):
     msp.add_line((x0 + 1250, y0), (x0 + 1250, y0 + h), dxfattribs={"layer": "KHUNG_TEN"})
 
 
-def build_dxf(g: Geometry, items: list[Item], bins, path: Path) -> ezdxf.document.Drawing:
+def build_dxf(g: Geometry, items: list[Item], bins, face: FacePlan, path: Path) -> ezdxf.document.Drawing:
     doc = setup_doc()
     msp = doc.modelspace()
 
-    draw_elevation(msp, g, items)
-    draw_section(msp, g, items, ox=9000, oy=0)
+    draw_elevation(msp, g, items, face)
+    draw_section(msp, g, items, face, ox=9000, oy=0)
     draw_plan(msp, g, ox=0, oy=-2600)
 
     # Bảng thống kê vật tư
@@ -555,11 +627,18 @@ def build_dxf(g: Geometry, items: list[Item], bins, path: Path) -> ezdxf.documen
          f"{n_bars * STOCK / 1000:.2f}", f"{n_bars * STOCK / 1000 * MASS:.1f}"],
         ["", f"ĐỀ XUẤT MUA (+{SPARE_BARS} cây dự phòng)", "", "", f"{n_buy}",
          f"{n_buy * STOCK / 1000:.2f}", f"{n_buy * STOCK / 1000 * MASS:.1f}"],
+        ["T1", f"Tôn phẳng mặt bảng – {face.n} tấm chạy ngang (xem ghi chú 8)",
+         f"Tôn {FACE_T:.2f} khổ {COIL_W:.0f}", f"{face.sheet_len:.0f}x{max(face.widths):.0f}", f"{face.n}",
+         f"{face.order_m:.1f} md", f"{face.kg:.1f}"],
+        ["V1", f"{SCREW} @{SCREW_PITCH:.0f} (đã +{SCREW_SPARE:.0%} dự phòng)", "Mạ kẽm", "",
+         f"{face.screws_buy}", "", ""],
     ]
+    if face.mode == "BUTT":
+        rows.append(["N1", "Nẹp phủ mối nối + nẹp viền chu vi", "Nẹp V nhôm/tôn", "", "", f"{face.strip_m:.1f}", ""])
     bold = {len(items) + 2, len(items) + 4}
     tx, ty = 10500, -2100
     widths = [300, 3500, 1000, 700, 300, 550, 550]
-    text(msp, "BẢNG THỐNG KÊ VẬT TƯ – THÉP HỘP", (tx + sum(widths) / 2, ty + 120), 150,
+    text(msp, "BẢNG THỐNG KÊ VẬT TƯ", (tx + sum(widths) / 2, ty + 120), 150,
          align=TextEntityAlignment.BOTTOM_CENTER)
     y_end = draw_table(msp, tx, ty, ["KH", "Tên cấu kiện", "Quy cách", "Dài cắt (mm)", "SL", "Tổng (m)", "KL (kg)"],
                        rows, widths, h=70, bold_rows=bold)
@@ -576,7 +655,10 @@ def build_dxf(g: Geometry, items: list[Item], bins, path: Path) -> ezdxf.documen
         "5. C4 đặt trùng tim xà gồ; bắt vít bắn tôn 5.5x75 (long đen cao su) vào xà gồ @≤600, bơm keo chống dột.\\P"
         "6. Chân bảng: bát L40x4 + tắc kê M8 @600 vào tường chắn/sê nô (hoặc vít vào xà gồ nếu đặt trên tôn).\\P"
         "7. Hàn kín 4 mặt tại nút (que J421 2.6 mm); mài, dặm kẽm lạnh/sơn chống rỉ 2 lớp tại mối hàn.\\P"
-        "8. Ô 1x1 m: mặt Alu nên dùng ≥ 4 mm (3 mm dễ phồng/võng); mối nối đứng tại x = 2000, 4000, ngang y = 1000."
+        f"8. Mặt tôn phẳng {FACE_T:.2f} mm khổ {COIL_W:.0f}: {face.n} tấm ngang "
+        f"{face.sheet_len:.0f} x {max(face.widths):.0f}, {face.describe()}.\\P"
+        f"    {SCREW} @{SCREW_PITCH:.0f} trên mọi thanh khung mặt, cách mép tôn ≥ 10 mm; tôn 0.30 mm dễ phồng "
+        "trên ô 1x1 m – ưu tiên 0.40 mm."
     )
     mt = msp.add_mtext(notes, dxfattribs={"style": TXT_STYLE, "char_height": 75, "layer": "TEXT",
                                           "width": sum(widths)})
@@ -595,7 +677,7 @@ def export_png(doc, path: Path):
     dm.qsave(doc.modelspace(), str(path), bg="#FFFFFF", dpi=110, size_inches=(23.4, 16.5))
 
 
-def export_xlsx(items: list[Item], bins, path: Path):
+def export_xlsx(items: list[Item], bins, face: FacePlan, path: Path):
     blue, red = "005BAC", "E60012"
     f_base = Font(name="Times New Roman", size=12)
     f_head = Font(name="Times New Roman", size=12, bold=True, color="FFFFFF")
@@ -611,7 +693,7 @@ def export_xlsx(items: list[Item], bins, path: Path):
     ws = wb.active
     ws.title = "BOQ"
     ws.merge_cells("A1:H1")
-    ws["A1"] = "BẢNG BÓC TÁCH KHỐI LƯỢNG – KHUNG BẢNG HIỆU 6000 x 2000 + HỆ CHỐNG"
+    ws["A1"] = "BẢNG BÓC TÁCH KHỐI LƯỢNG – KHUNG BẢNG HIỆU 6000 x 2000 + HỆ CHỐNG + MẶT TÔN"
     ws["A1"].font = f_title
     ws["A1"].alignment = center
     ws.merge_cells("A2:H2")
@@ -620,7 +702,7 @@ def export_xlsx(items: list[Item], bins, path: Path):
     ws["A2"].font = Font(name="Times New Roman", size=11, italic=True)
     ws["A2"].alignment = center
 
-    heads = ["STT", "Ký hiệu", "Tên cấu kiện", "Quy cách", "Dài cắt (mm)", "Số lượng (thanh)",
+    heads = ["STT", "Ký hiệu", "Tên cấu kiện", "Quy cách", "Dài cắt (mm)", "Số lượng",
              "Tổng dài (m)", "Khối lượng (kg)"]
     hr = 4
     for c, hname in enumerate(heads, 1):
@@ -680,6 +762,36 @@ def export_xlsx(items: list[Item], bins, path: Path):
             cell.alignment = left if c == 1 else center
         r += 1
 
+    # C. Mặt tôn phẳng + vật tư phụ
+    r += 1
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=8)
+    ws.cell(row=r, column=1, value="C. MẶT BẢNG TÔN PHẲNG + VẬT TƯ PHỤ").font = Font(
+        name="Times New Roman", size=12, bold=True, color=blue)
+    r += 1
+    face_rows = [
+        ("T1", f"Tôn phẳng – {face.n} tấm ngang, {face.describe()} "
+               f"(mua {face.order_len_m:.1f} md/tấm; DT tịnh {face.net_m2:.2f} m², mua {face.order_m2:.2f} m²)",
+         f"Tôn {FACE_T:.2f} mm khổ {COIL_W:.0f}", f"{face.sheet_len:.0f} x {max(face.widths):.0f}", face.n,
+         f"=F{{r}}*{face.order_len_m}", f"=G{{r}}*{COIL_W / 1000}*{FACE_T}*{RHO / 1000}"),
+        ("V1", f"{SCREW} @{SCREW_PITCH:.0f} – tính {face.screws} con + {SCREW_SPARE:.0%} dự phòng",
+         "Mạ kẽm", "", face.screws_buy, None, None),
+    ]
+    if face.mode == "BUTT":
+        face_rows.append(("N1", "Nẹp phủ mối nối + nẹp viền chu vi (m)", "Nẹp V nhôm/tôn", "", None,
+                          round(face.strip_m, 2), None))
+    for mk, name, spec, size, qty, g_f, h_f in face_rows:
+        vals = [stt, mk, name, spec, size, qty,
+                g_f.format(r=r) if isinstance(g_f, str) else g_f,
+                h_f.format(r=r) if isinstance(h_f, str) else h_f]
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(row=r, column=c, value=v)
+            cell.font, cell.border = f_base, border
+            cell.alignment = left if c == 3 else center
+        ws.cell(row=r, column=7).number_format = "0.00"
+        ws.cell(row=r, column=8).number_format = "0.0"
+        stt += 1
+        r += 1
+
     ws["J5"], ws["K5"] = "m (kg/m)", round(MASS, 4)
     ws["J6"], ws["K6"] = "Cây (m)", STOCK / 1000
     for cref in ("J5", "K5", "J6", "K6"):
@@ -712,15 +824,20 @@ def export_xlsx(items: list[Item], bins, path: Path):
 # 5. MAIN
 # ============================================================================
 def main():
+    global COIL_W, FACE_T
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parent, help="Thư mục xuất file")
     ap.add_argument("--no-png", action="store_true", help="Không xuất ảnh PNG")
+    ap.add_argument("--kho", type=float, default=COIL_W, help="Khổ tôn phẳng (mm), vd 1000 hoặc 1200")
+    ap.add_argument("--day", type=float, default=FACE_T, help="Chiều dày tôn phẳng (mm), vd 0.3 hoặc 0.4")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
+    COIL_W, FACE_T = args.kho, args.day
 
     g = build_geometry()
     items = build_items(g)
     bins = cutting_plan(items)
+    face = build_face(g)
 
     print(f"{'KH':4}{'Tên cấu kiện':55}{'Dài':>7}{'SL':>5}{'Tổng m':>9}{'kg':>8}")
     for it in items:
@@ -732,9 +849,14 @@ def main():
     for i, bn in enumerate(bins, 1):
         print(f"  Cây {i:2d}: " + " + ".join(f"{m}:{ln}" for m, ln in bn) + f"  | dư {bar_waste(bn):.0f}")
 
+    print(f"Tôn phẳng {FACE_T:.2f} mm khổ {COIL_W:.0f} [{face.mode}]: {face.n} tấm "
+          f"{face.sheet_len:.0f} x {[round(w) for w in face.widths]} | mua {face.order_m:.1f} md = "
+          f"{face.order_m2:.2f} m² (tịnh {face.net_m2:.2f} m²) ≈ {face.kg:.1f} kg | vít {face.screws} -> mua "
+          f"{face.screws_buy}" + (f" | nẹp {face.strip_m:.1f} m" if face.mode == "BUTT" else ""))
+
     dxf_path = args.out / f"{OUT_STEM}.dxf"
-    doc = build_dxf(g, items, bins, dxf_path)
-    export_xlsx(items, bins, args.out / f"BOQ_{OUT_STEM}.xlsx")
+    doc = build_dxf(g, items, bins, face, dxf_path)
+    export_xlsx(items, bins, face, args.out / f"BOQ_{OUT_STEM}.xlsx")
     if not args.no_png:
         export_png(doc, args.out / f"{OUT_STEM}.png")
     print(f"Đã xuất: {dxf_path.name}, BOQ_{OUT_STEM}.xlsx" + ("" if args.no_png else f", {OUT_STEM}.png"))
