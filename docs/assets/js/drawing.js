@@ -686,7 +686,8 @@
     cell(0, 0, w1, 'CÔNG TRÌNH / HẠNG MỤC:', (p.project.name || 'BẢNG HIỆU').toUpperCase());
     cell(w1, 0, w2, 'TÊN BẢN VẼ KỸ THUẬT:', info.drawingName);
     cell(0, -Hh / 2, w1, 'VẬT LIỆU KHUNG & NỀN:', `HỘP ${mat} + TÔN 3 DEM`, BRAND.blue);
-    cell(w1, -Hh / 2, w2, 'TỔNG VẬT TƯ CHÍNH:', `${res.totals.bars} CÂY THÉP 6M + ${U.fmt(res.face.buyM, 1)}m TÔN`, BRAND.red);
+    const buyBars = U.sum(res.purchase.filter((r) => r.group === 'Thép hộp'), (r) => r.qtyBuy);
+    cell(w1, -Hh / 2, w2, 'TỔNG VẬT TƯ CHÍNH:', `${buyBars} CÂY THÉP 6M + ${U.fmt(res.face.buyM, 1)}m TÔN 3 DEM`, BRAND.red);
     const x3 = w1 + w2 + 2.5;
     const rows3 = [
       `MÃ HIỆU: ${p.project.code || ''}-${String(info.no).padStart(2, '0')}`,
