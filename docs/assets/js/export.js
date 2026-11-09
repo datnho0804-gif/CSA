@@ -20,6 +20,46 @@
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Giao file: máy tính/Android tải ngay; iPhone/iPad hiện thanh "Lưu / Chia sẻ"
+   * vì Safari chỉ cho tải/chia sẻ khi người dùng chạm trực tiếp vào nút.        */
+  /* ------------------------------------------------------------------ */
+  const isAppleTouch = () => typeof navigator !== 'undefined'
+    && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+  const queue = [];
+  let readyUrl = null;
+  function showNext() {
+    const box = document.getElementById('fileReady');
+    if (readyUrl) { const u = readyUrl; setTimeout(() => URL.revokeObjectURL(u), 120000); readyUrl = null; }
+    const item = queue.shift();
+    if (!item) { box.hidden = true; return; }
+    readyUrl = URL.createObjectURL(item.blob);
+    document.getElementById('frName').textContent = queue.length ? `${item.name} (còn ${queue.length} file)` : item.name;
+    const a = document.getElementById('frSave');
+    a.href = readyUrl;
+    a.setAttribute('download', item.name);
+    const sh = document.getElementById('frShare');
+    let file = null;
+    try { file = new File([item.blob], item.name, { type: item.blob.type || 'application/octet-stream' }); } catch (e) { file = null; }
+    const canShare = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
+    sh.hidden = !canShare;
+    sh.onclick = async () => {
+      try { await navigator.share({ files: [file], title: item.name }); } catch (e) { /* người dùng huỷ */ }
+    };
+    box.hidden = false;
+  }
+  function deliver(name, data, type) {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: type || 'application/octet-stream' });
+    const box = typeof document !== 'undefined' ? document.getElementById('fileReady') : null;
+    if (!box || !isAppleTouch()) return download(name, blob);
+    queue.push({ name, blob });
+    if (box.hidden) showNext();
+    else document.getElementById('frName').textContent = `${document.getElementById('frSave').getAttribute('download')} (còn ${queue.length} file)`;
+    return true;
+  }
+  function closeReady() { showNext(); }
+  const pending = () => queue.length;
+
   function loadScript(src) {
     if (loading[src]) return loading[src];
     loading[src] = new Promise((resolve, reject) => {
@@ -410,6 +450,6 @@
     return doc.output('blob');
   }
 
-  SB.exporter = { download, xlsx, csv, svgToPng, print, pdf, buildPdf, fileBase, EXCELJS_URL };
+  SB.exporter = { download, deliver, closeReady, pending, isAppleTouch, xlsx, csv, svgToPng, print, pdf, buildPdf, fileBase, EXCELJS_URL };
   if (typeof module !== 'undefined' && module.exports) module.exports = SB;
 })(typeof window !== 'undefined' ? window : globalThis);
